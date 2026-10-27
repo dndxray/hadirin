@@ -8,59 +8,26 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const schedules = [
-  {
-    id: 'S001',
-    courseName: 'Pemrograman Mobile',
-    className: 'IF-A',
-    date: '27 Oktober 2026',
-    startTime: '09.00',
-    endTime: '10.40',
-    room: 'Lab Komputer 1',
-    assistant: 'Fadhil Ramadhan',
-    status: 'ongoing',
-  },
-  {
-    id: 'S002',
-    courseName: 'Basis Data',
-    className: 'IF-B',
-    date: '28 Oktober 2026',
-    startTime: '13.00',
-    endTime: '14.40',
-    room: 'Lab Komputer 2',
-    assistant: 'Caesar Aditya',
-    status: 'upcoming',
-  },
-  {
-    id: 'S003',
-    courseName: 'Algoritma dan Pemrograman',
-    className: 'IF-A',
-    date: '24 Oktober 2026',
-    startTime: '10.00',
-    endTime: '11.40',
-    room: 'Lab Komputer 1',
-    assistant: 'Fadhil Ramadhan',
-    status: 'completed',
-  },
-];
+import { practiceSessions } from '@/data/dummy-attendance';
+import type { SessionStatus } from '@/types/attendance';
+
+function getStatusLabel(status: SessionStatus) {
+  if (status === 'open') {
+    return 'Sedang berlangsung';
+  }
+
+  if (status === 'closed') {
+    return 'Selesai';
+  }
+
+  return 'Akan berlangsung';
+}
 
 export default function DetailSesiScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const session = schedules.find((item) => item.id === id);
-
-  function getStatusLabel(status: string) {
-    if (status === 'ongoing') {
-      return 'Sedang berlangsung';
-    }
-
-    if (status === 'completed') {
-      return 'Selesai';
-    }
-
-    return 'Akan berlangsung';
-  }
+  const session = practiceSessions.find((item) => item.id === id);
 
   return (
     <View style={styles.screen}>
@@ -109,8 +76,20 @@ export default function DetailSesiScreen() {
                 {session.courseName}
               </Text>
 
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusText}>
+              <View
+                style={[
+                  styles.statusBadge,
+                  session.status === 'upcoming' && styles.upcomingBadge,
+                  session.status === 'closed' && styles.closedBadge,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusText,
+                    session.status === 'upcoming' && styles.upcomingText,
+                    session.status === 'closed' && styles.closedText,
+                  ]}
+                >
                   {getStatusLabel(session.status)}
                 </Text>
               </View>
@@ -121,18 +100,16 @@ export default function DetailSesiScreen() {
               <Text style={styles.value}>{session.className}</Text>
 
               <Text style={styles.label}>TANGGAL</Text>
-              <Text style={styles.value}>{session.date}</Text>
+              <Text style={styles.value}>{session.dateLabel}</Text>
 
               <Text style={styles.label}>WAKTU PRAKTIKUM</Text>
-              <Text style={styles.value}>
-                {session.startTime}–{session.endTime} WIB
-              </Text>
+              <Text style={styles.value}>{session.timeRange}</Text>
 
               <Text style={styles.label}>RUANGAN</Text>
               <Text style={styles.value}>{session.room}</Text>
 
               <Text style={styles.label}>ASISTEN PRAKTIKUM</Text>
-              <Text style={styles.value}>{session.assistant}</Text>
+              <Text style={styles.value}>{session.assistantName}</Text>
             </View>
 
             <Text style={styles.note}>
@@ -217,10 +194,22 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginTop: 16,
   },
+  upcomingBadge: {
+    backgroundColor: '#3B3018',
+  },
+  closedBadge: {
+    backgroundColor: '#273449',
+  },
   statusText: {
     color: '#5EEAD4',
     fontSize: 12,
     fontWeight: '700',
+  },
+  upcomingText: {
+    color: '#FCD34D',
+  },
+  closedText: {
+    color: '#CBD5E1',
   },
   divider: {
     height: 1,

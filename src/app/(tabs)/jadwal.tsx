@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import {
   Platform,
   Pressable,
@@ -9,50 +9,16 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useRole } from '@/hooks/use-role';
+import { useApp } from '@/context/app-context';
+import { practiceSessions } from '@/data/dummy-attendance';
+import type { SessionStatus } from '@/types/attendance';
 
-const schedules = [
-  {
-    id: 'S001',
-    courseName: 'Pemrograman Mobile',
-    className: 'IF-A',
-    date: '27 Oktober 2026',
-    startTime: '09.00',
-    endTime: '10.40',
-    room: 'Lab Komputer 1',
-    assistant: 'Fadhil Ramadhan',
-    status: 'ongoing',
-  },
-  {
-    id: 'S002',
-    courseName: 'Basis Data',
-    className: 'IF-B',
-    date: '28 Oktober 2026',
-    startTime: '13.00',
-    endTime: '14.40',
-    room: 'Lab Komputer 2',
-    assistant: 'Caesar Aditya',
-    status: 'upcoming',
-  },
-  {
-    id: 'S003',
-    courseName: 'Algoritma dan Pemrograman',
-    className: 'IF-A',
-    date: '24 Oktober 2026',
-    startTime: '10.00',
-    endTime: '11.40',
-    room: 'Lab Komputer 1',
-    assistant: 'Fadhil Ramadhan',
-    status: 'completed',
-  },
-];
-
-function getStatusLabel(status: string) {
-  if (status === 'ongoing') {
+function getStatusLabel(status: SessionStatus) {
+  if (status === 'open') {
     return 'Sedang berlangsung';
   }
 
-  if (status === 'completed') {
+  if (status === 'closed') {
     return 'Selesai';
   }
 
@@ -61,45 +27,45 @@ function getStatusLabel(status: string) {
 
 export default function JadwalScreen() {
   const insets = useSafeAreaInsets();
-  const role = useRole();
-  const { userId } = useLocalSearchParams<{ userId?: string }>();
+  const { currentUser } = useApp();
 
+  const isAsisten = currentUser?.role === 'asisten';
   const paddingTop = Platform.OS === 'web' ? 100 : insets.top + 24;
-
-  const userName =
-    role === 'asisten' ? 'Asisten Praktikum' : 'Praktikan';
 
   return (
     <View style={styles.screen}>
       <ScrollView
         contentContainerStyle={[
           styles.container,
-          {
-            paddingTop,
-            paddingBottom: insets.bottom + 32,
-          },
+          { paddingTop, paddingBottom: insets.bottom + 32 },
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {!isAsisten ? (
+          <Pressable onPress={() => router.back()} style={styles.backButton}>
+            <Text style={styles.backText}>‹ Kembali</Text>
+          </Pressable>
+        ) : null}
+
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerCopy}>
             <Text style={styles.greeting}>HADIRIN</Text>
             <Text style={styles.title}>Jadwal Praktikum</Text>
             <Text style={styles.subtitle}>
-              Halo, {userName}! Berikut daftar sesi praktikummu.
+              Halo, {currentUser?.name}! Berikut daftar sesi praktikummu.
             </Text>
           </View>
 
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
-              {role === 'asisten' ? 'A' : 'P'}
+              {currentUser?.name.charAt(0)}
             </Text>
           </View>
         </View>
 
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>TOTAL SESI</Text>
-          <Text style={styles.summaryNumber}>{schedules.length}</Text>
+          <Text style={styles.summaryNumber}>{practiceSessions.length}</Text>
           <Text style={styles.summaryDescription}>
             Jadwal praktikum tersedia
           </Text>
@@ -107,7 +73,7 @@ export default function JadwalScreen() {
 
         <Text style={styles.sectionTitle}>Semua jadwal</Text>
 
-        {schedules.length === 0 ? (
+        {practiceSessions.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Belum ada jadwal</Text>
             <Text style={styles.emptyDescription}>
@@ -115,17 +81,13 @@ export default function JadwalScreen() {
             </Text>
           </View>
         ) : (
-          schedules.map((session) => (
+          practiceSessions.map((session) => (
             <Pressable
               key={session.id}
               onPress={() =>
                 router.push({
                   pathname: '/detail-sesi',
-                  params: {
-                    id: session.id,
-                    role,
-                    userId: userId ?? '',
-                  },
+                  params: { id: session.id },
                 })
               }
               style={({ pressed }) => [
@@ -134,24 +96,22 @@ export default function JadwalScreen() {
               ]}
             >
               <View style={styles.cardTop}>
-                <Text style={styles.classLabel}>
-                  KELAS {session.className}
-                </Text>
+                <Text style={styles.classLabel}>KELAS {session.className}</Text>
 
                 <View
                   style={[
                     styles.statusBadge,
-                    session.status === 'ongoing' && styles.ongoingBadge,
+                    session.status === 'open' && styles.openBadge,
                     session.status === 'upcoming' && styles.upcomingBadge,
-                    session.status === 'completed' && styles.completedBadge,
+                    session.status === 'closed' && styles.closedBadge,
                   ]}
                 >
                   <Text
                     style={[
                       styles.statusText,
-                      session.status === 'ongoing' && styles.ongoingText,
+                      session.status === 'open' && styles.openText,
                       session.status === 'upcoming' && styles.upcomingText,
-                      session.status === 'completed' && styles.completedText,
+                      session.status === 'closed' && styles.closedText,
                     ]}
                   >
                     {getStatusLabel(session.status)}
@@ -163,14 +123,12 @@ export default function JadwalScreen() {
 
               <View style={styles.infoRow}>
                 <Text style={styles.infoIcon}>▦</Text>
-                <Text style={styles.infoText}>{session.date}</Text>
+                <Text style={styles.infoText}>{session.dateLabel}</Text>
               </View>
 
               <View style={styles.infoRow}>
                 <Text style={styles.infoIcon}>◷</Text>
-                <Text style={styles.infoText}>
-                  {session.startTime}–{session.endTime}
-                </Text>
+                <Text style={styles.infoText}>{session.timeRange}</Text>
               </View>
 
               <View style={styles.cardFooter}>
@@ -196,10 +154,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     width: '100%',
   },
+  backButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  backText: {
+    color: '#2DD4BF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
+  },
+  headerCopy: {
+    flex: 1,
   },
   greeting: {
     color: '#2DD4BF',
@@ -295,26 +267,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  ongoingBadge: {
+  openBadge: {
     backgroundColor: '#123F3A',
   },
   upcomingBadge: {
     backgroundColor: '#3B3018',
   },
-  completedBadge: {
+  closedBadge: {
     backgroundColor: '#273449',
   },
   statusText: {
     fontSize: 10,
     fontWeight: '800',
   },
-  ongoingText: {
+  openText: {
     color: '#5EEAD4',
   },
   upcomingText: {
     color: '#FCD34D',
   },
-  completedText: {
+  closedText: {
     color: '#CBD5E1',
   },
   courseName: {
