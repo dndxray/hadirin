@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -7,6 +8,8 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useRole } from '@/hooks/use-role';
 
 const schedules = [
   {
@@ -58,10 +61,10 @@ function getStatusLabel(status: string) {
 
 export default function JadwalScreen() {
   const insets = useSafeAreaInsets();
-  const { role, userId } = useLocalSearchParams<{
-    role: string;
-    userId: string;
-  }>();
+  const role = useRole();
+  const { userId } = useLocalSearchParams<{ userId?: string }>();
+
+  const paddingTop = Platform.OS === 'web' ? 100 : insets.top + 24;
 
   const userName =
     role === 'asisten' ? 'Asisten Praktikum' : 'Praktikan';
@@ -72,7 +75,7 @@ export default function JadwalScreen() {
         contentContainerStyle={[
           styles.container,
           {
-            paddingTop: insets.top + 24,
+            paddingTop,
             paddingBottom: insets.bottom + 32,
           },
         ]}
@@ -120,7 +123,7 @@ export default function JadwalScreen() {
                   pathname: '/detail-sesi',
                   params: {
                     id: session.id,
-                    role: role ?? 'praktikan',
+                    role,
                     userId: userId ?? '',
                   },
                 })
@@ -177,15 +180,6 @@ export default function JadwalScreen() {
             </Pressable>
           ))
         )}
-
-        <Pressable
-          onPress={() => router.replace('/pilih-identitas')}
-          style={styles.changeUserButton}
-        >
-          <Text style={styles.changeUserText}>
-            Keluar
-          </Text>
-        </Pressable>
       </ScrollView>
     </View>
   );
@@ -383,19 +377,5 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 8,
     textAlign: 'center',
-  },
-  changeUserButton: {
-    alignItems: 'center',
-    borderColor: '#334155',
-    borderRadius: 13,
-    borderWidth: 1,
-    marginTop: 10,
-    minHeight: 48,
-    justifyContent: 'center',
-  },
-  changeUserText: {
-    color: '#CBD5E1',
-    fontSize: 13,
-    fontWeight: '700',
   },
 });

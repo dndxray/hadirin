@@ -41,6 +41,11 @@ export default function AppTabs() {
               </TabTrigger>
             </>
           )}
+
+          {/* Profil: tampil untuk semua role */}
+          <TabTrigger name="profil" href="/profil" asChild>
+            <TabButton>Profil</TabButton>
+          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>
@@ -91,13 +96,14 @@ export function CustomTabList({
 
         {props.children}
 
-        <ThemedText
-          type="small"
-          themeColor="textSecondary"
-          style={styles.roleText}
-        >
-          {userRole === 'asisten' ? 'Asisten' : 'Praktikan'}
-        </ThemedText>
+        <View style={styles.separator} />
+
+        <View style={styles.roleBadge}>
+          <View style={styles.roleDot} />
+          <ThemedText type="smallBold" style={styles.roleBadgeText}>
+            {userRole === 'asisten' ? 'Asisten' : 'Praktikan'}
+          </ThemedText>
+        </View>
       </ThemedView>
     </View>
   );
@@ -127,8 +133,33 @@ const styles = StyleSheet.create({
   brandText: {
     marginRight: 'auto',
   },
-  roleText: {
-    marginLeft: Spacing.three,
+    separator: {
+    width: StyleSheet.hairlineWidth,
+    height: 20,
+    marginLeft: Spacing.two,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  roleBadge: {
+    marginLeft: Spacing.two,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: Spacing.two,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(45, 212, 191, 0.4)',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
+  },
+  roleDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2dd4bf',
+  },
+  roleBadgeText: {
+    color: '#2dd4bf',
+    fontSize: 12,
   },
   tabButton: {
     borderRadius: Spacing.three,
