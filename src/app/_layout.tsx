@@ -1,20 +1,45 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
+  Stack,
+} from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
 import { AttendanceProvider } from '@/context/attendance-context';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
+export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
+    <ThemeProvider
+      value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+    >
       <AttendanceProvider>
-        <AppTabs />
+        <AnimatedSplashOverlay />
+
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="pilih-identitas" />
+          <Stack.Screen name="jadwal" />
+          <Stack.Screen name="detail-sesi" />
+          <Stack.Screen name="(tabs)" />
+        </Stack>
       </AttendanceProvider>
     </ThemeProvider>
   );
