@@ -33,11 +33,14 @@ export default function AppTabs() {
             </TabTrigger>
           ) : (
             <>
-              <TabTrigger name="index" href="/" asChild>
+              <TabTrigger name="presensi" href="/presensi" asChild>
                 <TabButton>Presensi</TabButton>
               </TabTrigger>
               <TabTrigger name="explore" href="/explore" asChild>
                 <TabButton>Riwayat</TabButton>
+              </TabTrigger>
+              <TabTrigger name="jadwal" href="/jadwal" asChild>
+                <TabButton>Jadwal</TabButton>
               </TabTrigger>
             </>
           )}
@@ -133,7 +136,7 @@ const styles = StyleSheet.create({
   brandText: {
     marginRight: 'auto',
   },
-    separator: {
+  separator: {
     width: StyleSheet.hairlineWidth,
     height: 20,
     marginLeft: Spacing.two,

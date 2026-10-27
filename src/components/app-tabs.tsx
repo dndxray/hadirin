@@ -15,7 +15,7 @@ export default function AppTabs() {
       indicatorColor={colors.backgroundElement}
       labelStyle={{ selected: { color: colors.text } }}
     >
-      <NativeTabs.Trigger name="index" hidden={isAsisten}>
+      <NativeTabs.Trigger name="presensi" hidden={isAsisten}>
         <NativeTabs.Trigger.Label>Presensi</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           src={require('@/assets/images/tabIcons/home.png')}
