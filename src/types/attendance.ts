@@ -25,3 +25,8 @@ export type AttendanceRecord = {
 };
 
 export type CheckInResult = 'success' | 'already-recorded' | 'session-unavailable';
+export type Role = 'asisten' | 'praktikan';
+
+export type AppUser = Practitioner & {
+  role: Role;
+};

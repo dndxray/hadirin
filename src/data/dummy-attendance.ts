@@ -1,9 +1,70 @@
-import type { PracticeSession, Practitioner } from '@/types/attendance';
+import type {
+  AppUser,
+  AttendanceRecord,
+  PracticeSession,
+  Role,
+} from '@/types/attendance';
 
-export const currentPractitioner: Practitioner = {
-  id: 'praktikan-02',
-  name: 'Caesar',
-  identifier: 'Praktikan 02',
+// Identitas default per peran
+export const DUMMY_USERS: Record<Role, AppUser> = {
+  praktikan: {
+    id: 'P001',
+    name: 'Caesar',
+    identifier: 'Praktikan 01',
+    role: 'praktikan',
+  },
+  asisten: {
+    id: 'A001',
+    name: 'Kak Rina',
+    identifier: 'Asisten 01',
+    role: 'asisten',
+  },
+};
+
+// Praktikan lain: bisa dipilih saat login dan mengisi rekap asisten
+export const otherPractitioners: AppUser[] = [
+  {
+    id: 'P002',
+    name: 'Dewi Lestari',
+    identifier: 'Praktikan 02',
+    role: 'praktikan',
+  },
+  {
+    id: 'P003',
+    name: 'Andi Pratama',
+    identifier: 'Praktikan 03',
+    role: 'praktikan',
+  },
+];
+
+export const allPractitioners: AppUser[] = [
+  DUMMY_USERS.praktikan,
+  ...otherPractitioners,
+];
+
+export function findPractitioner(id: string) {
+  return allPractitioners.find((p) => p.id === id);
+}
+
+// Asisten lain, supaya ada yang bisa dipilih saat login
+export const otherAssistants: AppUser[] = [
+  {
+    id: 'A002',
+    name: 'Kak Bima',
+    identifier: 'Asisten 02',
+    role: 'asisten',
+  },
+];
+
+export const allAssistants: AppUser[] = [
+  DUMMY_USERS.asisten,
+  ...otherAssistants,
+];
+
+// Daftar identitas yang bisa dipilih di layar Pilih Identitas
+export const usersByRole: Record<Role, AppUser[]> = {
+  praktikan: allPractitioners,
+  asisten: allAssistants,
 };
 
 export const practiceSessions: PracticeSession[] = [
@@ -14,7 +75,7 @@ export const practiceSessions: PracticeSession[] = [
     dateLabel: 'Minggu, 25 Oktober 2026',
     timeRange: '13.00–15.00 WIB',
     room: 'Lab Mobile 2',
-    assistantName: 'Fadhil',
+    assistantName: DUMMY_USERS.asisten.name,
     status: 'open',
   },
   {
@@ -24,7 +85,7 @@ export const practiceSessions: PracticeSession[] = [
     dateLabel: 'Senin, 19 Oktober 2026',
     timeRange: '09.30–11.30 WIB',
     room: 'Lab Komputasi 1',
-    assistantName: 'Nadia',
+    assistantName: DUMMY_USERS.asisten.name,
     status: 'closed',
   },
   {
@@ -34,7 +95,28 @@ export const practiceSessions: PracticeSession[] = [
     dateLabel: 'Rabu, 28 Oktober 2026',
     timeRange: '10.00–12.00 WIB',
     room: 'Lab Jaringan',
-    assistantName: 'Raka',
+    assistantName: DUMMY_USERS.asisten.name,
     status: 'upcoming',
+  },
+];
+
+export const initialAttendance: AttendanceRecord[] = [
+  {
+    id: 'att-1',
+    sessionId: 'basis-data-06',
+    practitionerId: 'P001',
+    checkedInAt: Date.parse('2026-10-19T09:40:00+07:00'),
+  },
+  {
+    id: 'att-2',
+    sessionId: 'basis-data-06',
+    practitionerId: 'P002',
+    checkedInAt: Date.parse('2026-10-19T09:35:00+07:00'),
+  },
+  {
+    id: 'att-3',
+    sessionId: 'basis-data-06',
+    practitionerId: 'P003',
+    checkedInAt: Date.parse('2026-10-19T09:45:00+07:00'),
   },
 ];
