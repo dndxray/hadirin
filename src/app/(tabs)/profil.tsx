@@ -1,4 +1,4 @@
-import { useGlobalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import {
   Platform,
   Pressable,
@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { clearRole, useRole } from '@/hooks/use-role';
+import { useApp } from '@/context/app-context';
 
 const ACCENT = '#2DD4BF';
 const DANGER = '#EF4444';
@@ -19,14 +19,13 @@ export default function ProfilScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const paddingTop = Platform.OS === 'web' ? 100 : insets.top + 24;
-  const role = useRole();
-  const { userId } = useGlobalSearchParams<{ userId?: string }>();
+  const { currentUser, logout } = useApp();
 
-  const isAsisten = role === 'asisten';
+  const isAsisten = currentUser?.role === 'asisten';
   const roleLabel = isAsisten ? 'Asisten Praktikum' : 'Praktikan';
 
   const handleKeluar = () => {
-    clearRole();
+    logout();
     router.replace('/pilih-identitas');
   };
 
@@ -54,7 +53,7 @@ export default function ProfilScreen() {
 
           <View style={styles.headerText}>
             <ThemedText type="subtitle" style={styles.title}>
-              Profil
+              {currentUser?.name ?? 'Profil'}
             </ThemedText>
             <View style={styles.badge}>
               <ThemedText type="smallBold" style={styles.badgeText}>
@@ -66,9 +65,9 @@ export default function ProfilScreen() {
 
         {/* Kartu informasi */}
         <View style={styles.card}>
-          <InfoRow label="ID Pengguna" value={userId ?? '-'} />
+          <InfoRow label="ID Pengguna" value={currentUser?.id ?? '-'} />
           <View style={styles.divider} />
-          <InfoRow label="Status" value="Aktif" />
+          <InfoRow label="Pengenal" value={currentUser?.identifier ?? '-'} />
         </View>
 
         {/* Tombol keluar */}
