@@ -1,98 +1,389 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import {
+  AccessibilityInfo,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import {
+  AttendanceConfirmationModal,
+  type AttendanceModalPhase,
+} from '@/components/attendance-confirmation-modal';
+import { SessionStatusBadge } from '@/components/session-status-badge';
+import { useAttendanceTheme } from '@/constants/attendance-theme';
+import { BottomTabInset, MaxContentWidth } from '@/constants/theme';
+import { useAttendance } from '@/context/attendance-context';
+import { currentPractitioner, practiceSessions } from '@/data/dummy-attendance';
+import { formatAttendanceTime } from '@/utils/attendance-format';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+export default function AttendanceScreen() {
+  const colors = useAttendanceTheme();
+  const insets = useSafeAreaInsets();
+  const { checkIn, records, hasAttended } = useAttendance();
+  const [modalPhase, setModalPhase] = useState<AttendanceModalPhase>('closed');
+
+  const activeSession =
+    practiceSessions.find((session) => session.status === 'open') ?? practiceSessions[0];
+  const otherSessions = practiceSessions.filter((session) => session.id !== activeSession.id);
+  const attended = hasAttended(activeSession.id);
+  const attendanceRecord = records.find(
+    (record) =>
+      record.sessionId === activeSession.id &&
+      record.practitionerId === currentPractitioner.id,
   );
-}
 
-export default function HomeScreen() {
+  const confirmAttendance = () => {
+    const result = checkIn(activeSession.id);
+
+    if (result === 'success') {
+      setModalPhase('success');
+      AccessibilityInfo.announceForAccessibility('Presensi berhasil dicatat.');
+      return;
+    }
+
+    setModalPhase(result === 'already-recorded' ? 'duplicate' : 'unavailable');
+  };
+
+  const viewHistory = () => {
+    setModalPhase('closed');
+    router.push('/explore');
+  };
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 20,
+            paddingBottom: insets.bottom + BottomTabInset + 32,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.contentWidth}>
+          <View style={styles.header}>
+            <View>
+              <Text style={[styles.greeting, { color: colors.inkMuted }]}>Selamat datang,</Text>
+              <Text style={[styles.practitionerName, { color: colors.ink }]}>
+                {currentPractitioner.name}
+              </Text>
+            </View>
+            <View
+              accessibilityLabel={`Identitas ${currentPractitioner.identifier}`}
+              style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
+              <Text style={[styles.avatarText, { color: colors.primary }]}>C</Text>
+            </View>
+          </View>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+          <View style={styles.titleBlock}>
+            <Text style={[styles.pageTitle, { color: colors.ink }]}>Sesi aktifmu</Text>
+            <Text style={[styles.pageSubtitle, { color: colors.inkMuted }]}>
+              Presensi tersedia selama asisten membuka sesi.
+            </Text>
+          </View>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+          <View
+            style={[
+              styles.activeCard,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}>
+            <View style={[styles.statusRail, { backgroundColor: colors.success }]} />
+            <View style={styles.activeCardContent}>
+              <SessionStatusBadge status={activeSession.status} />
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+              <Text style={[styles.courseName, { color: colors.ink }]}>
+                {activeSession.courseName}
+              </Text>
+              <Text style={[styles.className, { color: colors.inkMuted }]}>
+                {activeSession.className} · Asisten {activeSession.assistantName}
+              </Text>
+
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+              <View style={styles.metadataGrid}>
+                <View style={styles.metadataItem}>
+                  <Text style={[styles.metadataLabel, { color: colors.inkMuted }]}>Waktu</Text>
+                  <Text style={[styles.metadataValue, { color: colors.ink }]}>
+                    {activeSession.timeRange}
+                  </Text>
+                </View>
+                <View style={styles.metadataItem}>
+                  <Text style={[styles.metadataLabel, { color: colors.inkMuted }]}>Ruangan</Text>
+                  <Text style={[styles.metadataValue, { color: colors.ink }]}>
+                    {activeSession.room}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.dateText, { color: colors.inkMuted }]}>
+                {activeSession.dateLabel}
+              </Text>
+
+              {attended && attendanceRecord ? (
+                <View style={[styles.recordedNote, { backgroundColor: colors.successSoft }]}>
+                  <View style={[styles.checkCircle, { backgroundColor: colors.success }]}>
+                    <Text style={[styles.checkText, { color: colors.background }]}>✓</Text>
+                  </View>
+                  <View style={styles.recordedCopy}>
+                    <Text style={[styles.recordedTitle, { color: colors.success }]}>Sudah hadir</Text>
+                    <Text style={[styles.recordedTime, { color: colors.inkMuted }]}>
+                      Tercatat pukul {formatAttendanceTime(attendanceRecord.checkedInAt)}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
+              <Pressable
+                accessibilityHint={
+                  attended
+                    ? 'Presensi untuk sesi ini telah tercatat'
+                    : 'Membuka konfirmasi pencatatan kehadiran'
+                }
+                accessibilityRole="button"
+                accessibilityState={{ disabled: attended }}
+                disabled={attended}
+                onPress={() => setModalPhase('confirm')}
+                style={({ pressed }) => [
+                  styles.attendanceButton,
+                  {
+                    backgroundColor: attended ? colors.surfaceMuted : colors.primary,
+                    opacity: pressed ? 0.82 : 1,
+                  },
+                ]}>
+                <Text
+                  style={[
+                    styles.attendanceButtonText,
+                    { color: attended ? colors.inkMuted : colors.background },
+                  ]}>
+                  {attended ? 'Presensi sudah tercatat' : 'Isi presensi sekarang'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.otherSection}>
+            <Text style={[styles.sectionTitle, { color: colors.ink }]}>Sesi lainnya</Text>
+            <View style={[styles.sessionList, { borderColor: colors.border }]}>
+              {otherSessions.map((session, index) => (
+                <View
+                  key={session.id}
+                  style={[
+                    styles.sessionRow,
+                    index < otherSessions.length - 1 && {
+                      borderBottomColor: colors.border,
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                    },
+                  ]}>
+                  <View style={styles.sessionRowCopy}>
+                    <Text style={[styles.sessionRowName, { color: colors.ink }]}>
+                      {session.courseName}
+                    </Text>
+                    <Text style={[styles.sessionRowMeta, { color: colors.inkMuted }]}>
+                      {session.className} · {session.timeRange}
+                    </Text>
+                  </View>
+                  <SessionStatusBadge status={session.status} />
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+
+      <AttendanceConfirmationModal
+        attendanceTime={
+          attendanceRecord ? formatAttendanceTime(attendanceRecord.checkedInAt) : undefined
+        }
+        onClose={() => setModalPhase('closed')}
+        onConfirm={confirmAttendance}
+        onViewHistory={viewHistory}
+        phase={modalPhase}
+        session={activeSession}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
   },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
+  scrollContent: {
     alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+    paddingHorizontal: 20,
+  },
+  contentWidth: {
     maxWidth: MaxContentWidth,
+    width: '100%',
   },
-  heroSection: {
+  header: {
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  greeting: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  practitionerName: {
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 26,
+  },
+  avatar: {
+    alignItems: 'center',
+    borderRadius: 22,
+    height: 44,
     justifyContent: 'center',
+    width: 44,
+  },
+  avatarText: {
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  titleBlock: {
+    marginBottom: 22,
+    marginTop: 34,
+  },
+  pageTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    lineHeight: 38,
+  },
+  pageSubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 6,
+  },
+  activeCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  statusRail: {
+    width: 6,
+  },
+  activeCardContent: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    padding: 20,
   },
-  title: {
-    textAlign: 'center',
+  courseName: {
+    fontSize: 23,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    lineHeight: 29,
+    marginTop: 22,
   },
-  code: {
-    textTransform: 'uppercase',
+  className: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 5,
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 20,
+  },
+  metadataGrid: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  metadataItem: {
+    flex: 1,
+  },
+  metadataLabel: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  metadataValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 21,
+    marginTop: 3,
+  },
+  dateText: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 12,
+  },
+  recordedNote: {
+    alignItems: 'center',
+    borderRadius: 14,
+    flexDirection: 'row',
+    marginTop: 20,
+    padding: 13,
+  },
+  checkCircle: {
+    alignItems: 'center',
+    borderRadius: 16,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
+  checkText: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  recordedCopy: {
+    flex: 1,
+    marginLeft: 11,
+  },
+  recordedTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
+  recordedTime: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  attendanceButton: {
+    alignItems: 'center',
+    borderRadius: 15,
+    justifyContent: 'center',
+    marginTop: 20,
+    minHeight: 54,
+    paddingHorizontal: 20,
+  },
+  attendanceButtonText: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  otherSection: {
+    marginTop: 32,
+  },
+  sectionTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    lineHeight: 25,
+    marginBottom: 12,
+  },
+  sessionList: {
+    borderBottomWidth: 1,
+    borderTopWidth: 1,
+  },
+  sessionRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 14,
+    paddingVertical: 16,
+  },
+  sessionRowCopy: {
+    flex: 1,
+  },
+  sessionRowName: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 21,
+  },
+  sessionRowMeta: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
   },
 });
