@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   AccessibilityInfo,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,15 +18,19 @@ import {
 import { SessionStatusBadge } from '@/components/session-status-badge';
 import { useAttendanceTheme } from '@/constants/attendance-theme';
 import { BottomTabInset, MaxContentWidth } from '@/constants/theme';
+import { useApp } from '@/context/app-context';
 import { useAttendance } from '@/context/attendance-context';
-import { currentPractitioner, practiceSessions } from '@/data/dummy-attendance';
+import { practiceSessions } from '@/data/dummy-attendance';
 import { formatAttendanceTime } from '@/utils/attendance-format';
 
 export default function AttendanceScreen() {
   const colors = useAttendanceTheme();
   const insets = useSafeAreaInsets();
+  const { currentUser } = useApp();
   const { checkIn, records, hasAttended } = useAttendance();
   const [modalPhase, setModalPhase] = useState<AttendanceModalPhase>('closed');
+
+  const paddingTop = Platform.OS === 'web' ? 100 : insets.top + 20;
 
   const activeSession =
     practiceSessions.find((session) => session.status === 'open') ?? practiceSessions[0];
@@ -34,7 +39,7 @@ export default function AttendanceScreen() {
   const attendanceRecord = records.find(
     (record) =>
       record.sessionId === activeSession.id &&
-      record.practitionerId === currentPractitioner.id,
+      record.practitionerId === currentUser?.id,
   );
 
   const confirmAttendance = () => {
@@ -60,7 +65,7 @@ export default function AttendanceScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: insets.top + 20,
+            paddingTop,
             paddingBottom: insets.bottom + BottomTabInset + 32,
           },
         ]}
@@ -70,13 +75,15 @@ export default function AttendanceScreen() {
             <View>
               <Text style={[styles.greeting, { color: colors.inkMuted }]}>Selamat datang,</Text>
               <Text style={[styles.practitionerName, { color: colors.ink }]}>
-                {currentPractitioner.name}
+                {currentUser?.name}
               </Text>
             </View>
             <View
-              accessibilityLabel={`Identitas ${currentPractitioner.identifier}`}
+              accessibilityLabel={`Identitas ${currentUser?.identifier}`}
               style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
-              <Text style={[styles.avatarText, { color: colors.primary }]}>C</Text>
+              <Text style={[styles.avatarText, { color: colors.primary }]}>
+                {currentUser?.name.charAt(0)}
+              </Text>
             </View>
           </View>
 
@@ -166,28 +173,45 @@ export default function AttendanceScreen() {
           </View>
 
           <View style={styles.otherSection}>
-            <Text style={[styles.sectionTitle, { color: colors.ink }]}>Sesi lainnya</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.ink }]}>Jadwal praktikum</Text>
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => router.push('/jadwal')}
+                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+                <Text style={[styles.seeAll, { color: colors.primary }]}>Jadwal lainnya →</Text>
+              </Pressable>
+            </View>
+
             <View style={[styles.sessionList, { borderColor: colors.border }]}>
-              {otherSessions.map((session, index) => (
-                <View
+              {otherSessions.slice(0, 2).map((session, index, list) => (
+                <Pressable
                   key={session.id}
-                  style={[
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push({ pathname: '/detail-sesi', params: { id: session.id } })
+                  }
+                  style={({ pressed }) => [
                     styles.sessionRow,
-                    index < otherSessions.length - 1 && {
+                    index < list.length - 1 && {
                       borderBottomColor: colors.border,
                       borderBottomWidth: StyleSheet.hairlineWidth,
                     },
+                    pressed && { opacity: 0.65 },
                   ]}>
                   <View style={styles.sessionRowCopy}>
                     <Text style={[styles.sessionRowName, { color: colors.ink }]}>
                       {session.courseName}
                     </Text>
                     <Text style={[styles.sessionRowMeta, { color: colors.inkMuted }]}>
-                      {session.className} · {session.timeRange}
+                      {session.className} · {session.dateLabel}
+                    </Text>
+                    <Text style={[styles.sessionRowMeta, { color: colors.inkMuted }]}>
+                      {session.timeRange} · {session.room}
                     </Text>
                   </View>
                   <SessionStatusBadge status={session.status} />
-                </View>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -357,11 +381,20 @@ const styles = StyleSheet.create({
   otherSection: {
     marginTop: 32,
   },
+  sectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 19,
     fontWeight: '800',
     lineHeight: 25,
-    marginBottom: 12,
+  },
+  seeAll: {
+    fontSize: 13,
+    fontWeight: '800',
   },
   sessionList: {
     borderBottomWidth: 1,

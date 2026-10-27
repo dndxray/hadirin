@@ -1,6 +1,5 @@
-
-import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   Pressable,
@@ -11,7 +10,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type Role = 'praktikan' | 'asisten';
+import { useApp } from '@/context/app-context';
+import type { Role } from '@/types/attendance';
 
 const roleOptions: {
   id: Role;
@@ -35,23 +35,16 @@ const roleOptions: {
 
 export default function PilihIdentitasScreen() {
   const insets = useSafeAreaInsets();
-  const [selectedRole, setSelectedRole] =
-    useState<Role | null>(null);
+  const { login } = useApp();
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
 
   const handleContinue = () => {
     if (!selectedRole) return;
 
-    // Identitas demo ditentukan otomatis berdasarkan peran.
-    const userId =
-      selectedRole === 'praktikan' ? 'P001' : 'A001';
+    // Identitas (id dan nama) ditentukan di dummy-attendance.ts lewat login().
+    login(selectedRole);
 
-    router.replace({
-      pathname: '/jadwal',
-      params: {
-        role: selectedRole,
-        userId,
-      },
-    });
+    router.replace(selectedRole === 'asisten' ? '/jadwal' : '/presensi');
   };
 
   return (
@@ -68,23 +61,15 @@ export default function PilihIdentitasScreen() {
       >
         <View style={styles.header}>
           <View style={styles.logo}>
-            <Ionicons
-              name="calendar-outline"
-              size={28}
-              color="#2DD4BF"
-            />
+            <Ionicons name="calendar-outline" size={28} color="#2DD4BF" />
           </View>
 
           <Text style={styles.appName}>Hadirin</Text>
-          <Text style={styles.subtitle}>
-            Sistem Presensi Praktikum
-          </Text>
+          <Text style={styles.subtitle}>Sistem Presensi Praktikum</Text>
         </View>
 
         <View style={styles.headingContainer}>
-          <Text style={styles.title}>
-            Masuk sebagai siapa?
-          </Text>
+          <Text style={styles.title}>Masuk sebagai siapa?</Text>
           <Text style={styles.description}>
             Pilih peranmu untuk melanjutkan ke aplikasi.
           </Text>
@@ -117,23 +102,16 @@ export default function PilihIdentitasScreen() {
                 </View>
 
                 <View style={styles.roleInfo}>
-                  <Text style={styles.roleTitle}>
-                    {role.title}
-                  </Text>
+                  <Text style={styles.roleTitle}>{role.title}</Text>
                   <Text style={styles.roleDescription}>
                     {role.description}
                   </Text>
                 </View>
 
                 <View
-                  style={[
-                    styles.radio,
-                    isSelected && styles.radioSelected,
-                  ]}
+                  style={[styles.radio, isSelected && styles.radioSelected]}
                 >
-                  {isSelected && (
-                    <View style={styles.radioInner} />
-                  )}
+                  {isSelected && <View style={styles.radioInner} />}
                 </View>
               </Pressable>
             );
@@ -148,9 +126,7 @@ export default function PilihIdentitasScreen() {
             !selectedRole && styles.continueButtonDisabled,
           ]}
         >
-          <Text style={styles.continueText}>
-            Lanjutkan
-          </Text>
+          <Text style={styles.continueText}>Lanjutkan</Text>
           <Ionicons
             name="arrow-forward"
             size={20}
@@ -158,9 +134,7 @@ export default function PilihIdentitasScreen() {
           />
         </Pressable>
 
-        <Text style={styles.footer}>
-          Pilih peran sesuai kebutuhanmu
-        </Text>
+        <Text style={styles.footer}>Pilih peran sesuai kebutuhanmu</Text>
       </ScrollView>
     </View>
   );

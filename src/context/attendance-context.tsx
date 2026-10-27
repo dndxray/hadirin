@@ -8,7 +8,8 @@ import {
   useState,
 } from 'react';
 
-import { currentPractitioner, practiceSessions } from '@/data/dummy-attendance';
+import { useApp } from '@/context/app-context';
+import { initialAttendance, practiceSessions } from '@/data/dummy-attendance';
 import type { AttendanceRecord, CheckInResult } from '@/types/attendance';
 
 type AttendanceContextValue = {
@@ -20,56 +21,70 @@ type AttendanceContextValue = {
 const AttendanceContext = createContext<AttendanceContextValue | null>(null);
 
 export function AttendanceProvider({ children }: PropsWithChildren) {
-  const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  const recordsRef = useRef<AttendanceRecord[]>([]);
+  const { currentUser } = useApp();
+  const userId = currentUser?.id;
+
+  const [records, setRecords] = useState<AttendanceRecord[]>(initialAttendance);
+  const recordsRef = useRef<AttendanceRecord[]>(initialAttendance);
 
   const hasAttended = useCallback(
     (sessionId: string) =>
-    records.some(
-      (record) =>
-        record.sessionId === sessionId && record.practitionerId === currentPractitioner.id,
+      records.some(
+        (record) =>
+          record.sessionId === sessionId && record.practitionerId === userId,
       ),
-    [records],
+    [records, userId],
   );
 
-  const checkIn = useCallback((sessionId: string): CheckInResult => {
-    const session = practiceSessions.find((item) => item.id === sessionId);
+  const checkIn = useCallback(
+    (sessionId: string): CheckInResult => {
+      if (!userId) {
+        return 'session-unavailable';
+      }
 
-    if (!session || session.status !== 'open') {
-      return 'session-unavailable';
-    }
+      const session = practiceSessions.find((item) => item.id === sessionId);
 
-    const duplicate = recordsRef.current.some(
-      (record) =>
-        record.sessionId === sessionId && record.practitionerId === currentPractitioner.id,
-    );
+      if (!session || session.status !== 'open') {
+        return 'session-unavailable';
+      }
 
-    if (duplicate) {
-      return 'already-recorded';
-    }
+      const duplicate = recordsRef.current.some(
+        (record) =>
+          record.sessionId === sessionId && record.practitionerId === userId,
+      );
 
-    const nextRecords = [
-      ...recordsRef.current,
-      {
-        id: `${currentPractitioner.id}-${sessionId}`,
-        sessionId,
-        practitionerId: currentPractitioner.id,
-        checkedInAt: Date.now(),
-      },
-    ];
+      if (duplicate) {
+        return 'already-recorded';
+      }
 
-    recordsRef.current = nextRecords;
-    setRecords(nextRecords);
+      const nextRecords = [
+        ...recordsRef.current,
+        {
+          id: `${userId}-${sessionId}`,
+          sessionId,
+          practitionerId: userId,
+          checkedInAt: Date.now(),
+        },
+      ];
 
-    return 'success';
-  }, []);
+      recordsRef.current = nextRecords;
+      setRecords(nextRecords);
+
+      return 'success';
+    },
+    [userId],
+  );
 
   const value = useMemo(
     () => ({ records, checkIn, hasAttended }),
     [checkIn, hasAttended, records],
   );
 
-  return <AttendanceContext.Provider value={value}>{children}</AttendanceContext.Provider>;
+  return (
+    <AttendanceContext.Provider value={value}>
+      {children}
+    </AttendanceContext.Provider>
+  );
 }
 
 export function useAttendance() {

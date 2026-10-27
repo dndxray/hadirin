@@ -1,15 +1,8 @@
-import { useGlobalSearchParams } from 'expo-router';
+import { useApp } from '@/context/app-context';
+import type { Role } from '@/types/attendance';
 
-export type Role = 'asisten' | 'praktikan';
-
-let lastRole: Role = 'praktikan';
+export type { Role };
 
 export function useRole(): Role {
-  const { role } = useGlobalSearchParams<{ role?: string }>();
-
-  if (role === 'asisten' || role === 'praktikan') {
-    lastRole = role;
-  }
-
-  return lastRole;
+  return useApp().currentUser?.role ?? 'praktikan';
 }

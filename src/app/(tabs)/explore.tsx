@@ -4,8 +4,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAttendanceTheme } from '@/constants/attendance-theme';
 import { BottomTabInset, MaxContentWidth } from '@/constants/theme';
+import { useApp } from '@/context/app-context';
 import { useAttendance } from '@/context/attendance-context';
-import { currentPractitioner, practiceSessions } from '@/data/dummy-attendance';
+import { practiceSessions } from '@/data/dummy-attendance';
 import type { AttendanceRecord, PracticeSession } from '@/types/attendance';
 import { formatAttendanceDate, formatAttendanceTime } from '@/utils/attendance-format';
 
@@ -17,10 +18,11 @@ type HistoryItem = {
 export default function AttendanceHistoryScreen() {
   const colors = useAttendanceTheme();
   const insets = useSafeAreaInsets();
+  const { currentUser } = useApp();
   const { records } = useAttendance();
 
   const history: HistoryItem[] = records
-    .filter((record) => record.practitionerId === currentPractitioner.id)
+    .filter((record) => record.practitionerId === currentUser?.id)
     .map((record) => ({
       record,
       session: practiceSessions.find((session) => session.id === record.sessionId),
@@ -42,7 +44,7 @@ export default function AttendanceHistoryScreen() {
         <View style={styles.contentWidth}>
           <Text style={[styles.pageTitle, { color: colors.ink }]}>Riwayat kehadiran</Text>
           <Text style={[styles.pageSubtitle, { color: colors.inkMuted }]}>
-            Catatan presensi milik {currentPractitioner.name} selama aplikasi berjalan.
+            Catatan presensi milik {currentUser?.name} selama aplikasi berjalan.
           </Text>
 
           <View
@@ -56,10 +58,10 @@ export default function AttendanceHistoryScreen() {
             </View>
             <View style={styles.summaryIdentity}>
               <Text style={[styles.identityName, { color: colors.ink }]}>
-                {currentPractitioner.name}
+                {currentUser?.name}
               </Text>
               <Text style={[styles.identityNumber, { color: colors.inkMuted }]}>
-                {currentPractitioner.identifier}
+                {currentUser?.identifier}
               </Text>
             </View>
           </View>
