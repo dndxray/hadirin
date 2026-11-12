@@ -9,6 +9,7 @@ type AttendanceConfirmationModalProps = {
   phase: AttendanceModalPhase;
   session: PracticeSession;
   attendanceTime?: string;
+  busy?: boolean;
   onClose: () => void;
   onConfirm: () => void;
   onViewHistory: () => void;
@@ -18,6 +19,7 @@ export function AttendanceConfirmationModal({
   phase,
   session,
   attendanceTime,
+  busy = false,
   onClose,
   onConfirm,
   onViewHistory,
@@ -124,12 +126,13 @@ export function AttendanceConfirmationModal({
               </Pressable>
               <Pressable
                 accessibilityRole="button"
+                disabled={busy}
                 onPress={onConfirm}
                 style={({ pressed }) => [
                   styles.primaryButton,
                   { backgroundColor: pressed ? colors.primaryPressed : colors.primary },
                 ]}>
-                <Text style={[styles.primaryLabel, { color: colors.background }]}>Catat kehadiran</Text>
+                <Text style={[styles.primaryLabel, { color: colors.background }]}>{busy ? 'Menyimpan…' : 'Catat kehadiran'}</Text>
               </Pressable>
             </View>
           ) : (
