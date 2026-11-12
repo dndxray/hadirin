@@ -44,6 +44,9 @@ export default function AppTabs() {
               <TabTrigger name="explore" href="/explore" asChild>
                 <TabButton>Riwayat</TabButton>
               </TabTrigger>
+              <TabTrigger name="izin" href="/izin" asChild>
+                <TabButton>Izin</TabButton>
+              </TabTrigger>
               <TabTrigger name="jadwal" href="/jadwal" asChild>
                 <TabButton>Jadwal</TabButton>
               </TabTrigger>
