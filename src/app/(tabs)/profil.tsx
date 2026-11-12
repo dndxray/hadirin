@@ -1,192 +1,197 @@
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { AuthError, authColors } from '@/components/auth-ui';
+import { StateView } from '@/components/state-view';
 import { useApp } from '@/context/app-context';
-
-const ACCENT = '#2DD4BF';
-const DANGER = '#EF4444';
 
 export default function ProfilScreen() {
   const insets = useSafeAreaInsets();
-  const paddingTop = Platform.OS === 'web' ? 100 : insets.top + 24;
   const { currentUser, logout } = useApp();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const isAsisten = currentUser?.role === 'asisten';
-  const roleLabel = isAsisten ? 'Asisten Praktikum' : 'Praktikan';
-
-  const handleKeluar = () => {
-    logout();
+  const handleKeluar = async () => {
+    setError(null);
+    setLoggingOut(true);
+    try {
+      await logout();
+    } catch {
+      setError('Gagal keluar. Periksa koneksi lalu coba lagi.');
+      setLoggingOut(false);
+    }
   };
 
+  if (!currentUser) {
+    return (
+      <View style={[styles.screen, styles.center, { paddingTop: insets.top + 24 }]}>
+        <View style={styles.centerInner}>
+          <StateView
+            kind="error"
+            title="Profil tidak ditemukan"
+            message="Data akunmu tidak dapat dimuat. Silakan keluar lalu masuk kembali."
+            actionLabel="Keluar"
+            onAction={handleKeluar}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  const isAsisten = currentUser.role === 'asisten';
+  const roleLabel = isAsisten ? 'Asisten Praktikum' : 'Praktikan';
+  const initial = currentUser.name?.charAt(0).toUpperCase() || '?';
+
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop, paddingBottom: insets.bottom + 32 },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.inner}>
-        <ThemedText type="smallBold" style={styles.eyebrow}>
-          HADIRIN
-        </ThemedText>
-
-        {/* Header profil */}
-        <View style={styles.header}>
-          <View style={styles.avatar}>
-            <ThemedText type="subtitle" style={styles.avatarText}>
-              {currentUser?.name?.charAt(0).toUpperCase() || '?'}
-            </ThemedText>
-          </View>
-
-          <View style={styles.headerText}>
-            <ThemedText type="subtitle" style={styles.title}>
-              {currentUser?.name ?? 'Profil'}
-            </ThemedText>
+    <View style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.header, { paddingTop: insets.top + 28 }]}>
+          <View style={styles.headerInner}>
+            <Text style={styles.eyebrow}>HADIRIN</Text>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initial}</Text>
+            </View>
+            <Text style={styles.name}>{currentUser.name}</Text>
             <View style={styles.badge}>
-              <ThemedText type="smallBold" style={styles.badgeText}>
-                {roleLabel}
-              </ThemedText>
+              <Text style={styles.badgeText}>{roleLabel}</Text>
             </View>
           </View>
         </View>
 
-        {/* Kartu informasi */}
-        <View style={styles.card}>
-          <InfoRow label="Nama" value={currentUser?.name ?? '-'} />
-          <View style={styles.divider} />
-          <InfoRow label="Email" value={currentUser?.identifier ?? '-'} />
-          <View style={styles.divider} />
-          <InfoRow label="Peran" value={roleLabel} />
-        </View>
+        <View style={styles.body}>
+          <View style={styles.bodyInner}>
+            <View style={styles.card}>
+              <InfoRow icon="person-outline" label="Nama" value={currentUser.name} />
+              <View style={styles.divider} />
+              <InfoRow icon="mail-outline" label="Email" value={currentUser.identifier} />
+              <View style={styles.divider} />
+              <InfoRow icon="shield-checkmark-outline" label="Peran" value={roleLabel} />
+            </View>
 
-        {/* Tombol keluar */}
-        <Pressable
-          onPress={handleKeluar}
-          style={({ pressed }) => [styles.logout, pressed && styles.pressed]}
-        >
-          <ThemedText type="smallBold" style={styles.logoutText}>
-            Keluar
-          </ThemedText>
-        </Pressable>
-      </View>
-    </ScrollView>
+            <AuthError message={error} />
+
+            <Pressable
+              onPress={handleKeluar}
+              disabled={loggingOut}
+              style={[styles.logout, loggingOut && { opacity: 0.6 }]}
+            >
+              {loggingOut ? (
+                <ActivityIndicator color={authColors.danger} />
+              ) : (
+                <>
+                  <Ionicons name="log-out-outline" size={18} color={authColors.danger} />
+                  <Text style={styles.logoutText}>Keluar</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+}) {
   return (
     <View style={styles.row}>
-      <ThemedText type="small" style={styles.rowLabel}>
-        {label}
-      </ThemedText>
-      <ThemedText type="smallBold" style={styles.rowValue}>
-        {value}
-      </ThemedText>
+      <View style={styles.rowIcon}>
+        <Ionicons name={icon} size={18} color={authColors.navy} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.rowValue}>{value || '-'}</Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-    backgroundColor: '#0B1120',
-  },
-  content: {
-    paddingHorizontal: 22,
-    alignItems: 'center',
-  },
-  inner: {
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    gap: Spacing.three,
-  },
-  eyebrow: {
-    color: ACCENT,
-    letterSpacing: 3,
-  },
+  screen: { flex: 1, backgroundColor: authColors.background },
+  center: { alignItems: 'center', paddingHorizontal: 20 },
+  centerInner: { width: '100%', maxWidth: 560, marginTop: 40 },
+
   header: {
-    flexDirection: 'row',
+    backgroundColor: authColors.navy,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingBottom: 56,
     alignItems: 'center',
-    gap: Spacing.three,
-    marginBottom: Spacing.two,
+  },
+  headerInner: { width: '100%', maxWidth: 560, alignItems: 'center', gap: 10 },
+  eyebrow: {
+    color: '#5EEAD4',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.6,
+    alignSelf: 'flex-start',
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 1.5,
-    borderColor: ACCENT,
-    backgroundColor: '#12302F',
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: authColors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  avatarText: { color: authColors.navy, fontSize: 34, fontWeight: '800' },
+  name: { color: authColors.white, fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  badge: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+  },
+  badgeText: { color: authColors.white, fontSize: 12, fontWeight: '800' },
+
+  body: { alignItems: 'center', paddingHorizontal: 20, marginTop: -28 },
+  bodyInner: { width: '100%', maxWidth: 560, gap: 14 },
+  card: {
+    backgroundColor: authColors.white,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    shadowColor: '#1B2A4E',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  rowIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#E8EEF9',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: {
-    color: ACCENT,
-  },
-  headerText: {
-    gap: Spacing.one,
-    alignItems: 'flex-start',
-  },
-  title: {
-    color: '#F8FAFC',
-  },
-  badge: {
-    paddingVertical: 4,
-    paddingHorizontal: Spacing.two,
-    borderRadius: 999,
-    backgroundColor: '#123F3A',
-  },
-  badgeText: {
-    color: '#5EEAD4',
-    fontSize: 12,
-  },
-  card: {
-    backgroundColor: '#111C30',
-    borderColor: '#263449',
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.two,
-  },
-  rowLabel: {
-    color: '#94A3B8',
-  },
-  rowValue: {
-    color: '#F8FAFC',
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#263449',
-  },
+  rowLabel: { color: authColors.muted, fontSize: 12 },
+  rowValue: { color: authColors.ink, fontSize: 15, fontWeight: '700', marginTop: 1 },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: authColors.border },
+
   logout: {
-    marginTop: Spacing.two,
-    paddingVertical: Spacing.two,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: DANGER,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: authColors.dangerSoft,
   },
-  logoutText: {
-    color: DANGER,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
+  logoutText: { color: authColors.danger, fontSize: 16, fontWeight: '800' },
 });
