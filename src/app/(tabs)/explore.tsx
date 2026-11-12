@@ -1,6 +1,7 @@
 import { Text, View } from 'react-native';
 
 import { DataState, PractitionerScreen, ui } from '@/components/practitioner-ui';
+import { PermissionHistory } from '@/components/permission-history';
 import { useAttendanceTheme } from '@/constants/attendance-theme';
 import { useAttendance } from '@/context/attendance-context';
 import { formatAttendanceDate, formatAttendanceTime } from '@/utils/attendance-format';
@@ -22,5 +23,6 @@ export default function AttendanceHistoryScreen() {
         ? `Tercatat ${formatAttendanceDate(record.checkedInAt)}, ${formatAttendanceTime(record.checkedInAt)}`
         : 'Menunggu waktu server'}</Text>
     </View>)}
+    <PermissionHistory />
   </PractitionerScreen>;
 }
