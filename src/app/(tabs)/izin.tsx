@@ -58,7 +58,7 @@ export default function PermissionScreen() {
     <Text style={{ color: colors.inkMuted }}>{reason.trim().length}/1.000 karakter · minimal 10 karakter</Text>
     {error ? <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text> : null}
     <Action label={busy ? 'Menyimpan pengajuan…' : 'Kirim pengajuan izin'} disabled={busy || !ready || !eligible.length} onPress={() => void submit()} />
-    <Modal transparent visible={success} animationType="fade" onRequestClose={() => setSuccess(false)}>
+    {success ? <Modal transparent visible animationType="fade" onRequestClose={() => setSuccess(false)}>
       <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: colors.overlay }}>
         <View accessibilityViewIsModal style={[ui.panel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[ui.heading, { color: colors.ink }]}>Izin berhasil diajukan</Text>
@@ -66,6 +66,6 @@ export default function PermissionScreen() {
           <Action label="Lihat status izin" onPress={() => { setSuccess(false); router.push('/explore'); }} />
         </View>
       </View>
-    </Modal>
+    </Modal> : null}
   </PractitionerScreen>;
 }
