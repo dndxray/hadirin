@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -32,7 +32,7 @@ export default function SessionDetailScreen() {
   const [showConfirmClose, setShowConfirmClose] = useState(false);
   const [query, setQuery] = useState('');
 
-  const filteredAttendances = useMemo(() => {
+  const filteredAttendances = (() => {
     if (!query.trim()) {
       return allAttendances;
     }
@@ -42,7 +42,7 @@ export default function SessionDetailScreen() {
         att.practitionerName.toLowerCase().includes(lowerQuery) ||
         att.practitionerNim.includes(lowerQuery)
     );
-  }, [allAttendances, query]);
+  })();
 
   const handleOpenSession = () => {
     if (session) {
