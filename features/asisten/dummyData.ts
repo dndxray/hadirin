@@ -107,3 +107,12 @@ export const dummyAttendances: Attendance[] = [
     status: 'PRESENT',
   },
 ];
+
+export const dummyRoster: { nim: string; name: string }[] = [
+  { nim: '2230001', name: 'Andi Pratama' },
+  { nim: '2230002', name: 'Budi Santoso' },
+  { nim: '2230003', name: 'Citra Maharani' },
+  { nim: '2230004', name: 'Dewi Lestari' },
+  { nim: '2230005', name: 'Eko Prasetyo' },
+  { nim: '2230006', name: 'Fitri Handayani' },
+];
