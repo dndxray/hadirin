@@ -11,6 +11,7 @@ import { useColorScheme } from 'react-native';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AppProvider } from '@/context/app-context';
 import { AttendanceProvider } from '@/context/attendance-context';
+import { AuthProvider } from '@/context/auth-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -30,18 +31,22 @@ export default function RootLayout() {
     <ThemeProvider
       value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
     >
-      <AppProvider>
-        <AttendanceProvider>
-          <AnimatedSplashOverlay />
+      <AuthProvider>
+        <AppProvider>
+          <AttendanceProvider>
+            <AnimatedSplashOverlay />
 
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="pilih-identitas" />
-            <Stack.Screen name="detail-sesi" />
-            <Stack.Screen name="(tabs)" />
-          </Stack>
-        </AttendanceProvider>
-      </AppProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="login" />
+              <Stack.Screen name="daftar" />
+              <Stack.Screen name="pilih-identitas" />
+              <Stack.Screen name="detail-sesi" />
+              <Stack.Screen name="(tabs)" />
+            </Stack>
+          </AttendanceProvider>
+        </AppProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }
