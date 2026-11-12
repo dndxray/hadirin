@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import {
   Platform,
   Pressable,
@@ -16,7 +15,6 @@ const ACCENT = '#2DD4BF';
 const DANGER = '#EF4444';
 
 export default function ProfilScreen() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const paddingTop = Platform.OS === 'web' ? 100 : insets.top + 24;
   const { currentUser, logout } = useApp();
@@ -26,7 +24,6 @@ export default function ProfilScreen() {
 
   const handleKeluar = () => {
     logout();
-    router.replace('/pilih-identitas');
   };
 
   return (
@@ -47,7 +44,7 @@ export default function ProfilScreen() {
         <View style={styles.header}>
           <View style={styles.avatar}>
             <ThemedText type="subtitle" style={styles.avatarText}>
-              {isAsisten ? 'A' : 'P'}
+              {currentUser?.name?.charAt(0).toUpperCase() || '?'}
             </ThemedText>
           </View>
 
@@ -65,9 +62,11 @@ export default function ProfilScreen() {
 
         {/* Kartu informasi */}
         <View style={styles.card}>
-          <InfoRow label="ID Pengguna" value={currentUser?.id ?? '-'} />
+          <InfoRow label="Nama" value={currentUser?.name ?? '-'} />
           <View style={styles.divider} />
-          <InfoRow label="Pengenal" value={currentUser?.identifier ?? '-'} />
+          <InfoRow label="Email" value={currentUser?.identifier ?? '-'} />
+          <View style={styles.divider} />
+          <InfoRow label="Peran" value={roleLabel} />
         </View>
 
         {/* Tombol keluar */}
