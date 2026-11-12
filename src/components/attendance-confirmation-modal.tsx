@@ -44,7 +44,7 @@ export function AttendanceConfirmationModal({
   const message = isConfirm
     ? 'Pastikan identitas dan sesi di bawah sudah benar sebelum melanjutkan.'
     : isSuccess
-      ? `Kehadiranmu tercatat pada ${attendanceTime ?? 'waktu sekarang'}.`
+      ? attendanceTime ? `Kehadiranmu tercatat pada ${attendanceTime}.` : 'Kehadiran tersimpan. Waktu server akan muncul di riwayat.'
       : phase === 'duplicate'
         ? 'Kamu hanya dapat melakukan presensi satu kali untuk sesi ini.'
         : 'Presensi hanya dapat dilakukan ketika asisten membuka sesi.';

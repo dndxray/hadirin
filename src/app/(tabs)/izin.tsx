@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { router } from 'expo-router';
 import { Modal, Text, TextInput, View } from 'react-native';
 
 import { Action, DataState, PractitionerScreen, ui } from '@/components/practitioner-ui';
@@ -62,7 +63,7 @@ export default function PermissionScreen() {
         <View accessibilityViewIsModal style={[ui.panel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[ui.heading, { color: colors.ink }]}>Izin berhasil diajukan</Text>
           <Text style={[ui.body, { color: colors.inkMuted }]}>Pengajuan tersimpan dengan status menunggu. Pantau keputusan asisten di Riwayat. Izin tetap tersimpan apabila klasifikasi AI gagal.</Text>
-          <Action label="Mengerti" onPress={() => setSuccess(false)} />
+          <Action label="Lihat status izin" onPress={() => { setSuccess(false); router.push('/explore'); }} />
         </View>
       </View>
     </Modal>

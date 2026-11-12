@@ -76,8 +76,7 @@ service cloud.firestore {
         && participant(request.resource.data.sessionId)
         && sessionData(request.resource.data.sessionId).status in ['open', 'upcoming']
         && request.resource.data.reason is string
-        && request.resource.data.reason.size() >= 10 && request.resource.data.reason.size() <= 1000
-        && request.resource.data.reason.matches('.*[^\\s].*')
+        && request.resource.data.reason.trim().size() >= 10 && request.resource.data.reason.size() <= 1000
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time
         && request.resource.data.ai == {'status': 'pending'}

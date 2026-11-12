@@ -9,6 +9,7 @@ import {
 import {
   Pressable,
   type PressableProps,
+  useWindowDimensions,
   View,
   StyleSheet,
 } from 'react-native';
@@ -95,26 +96,27 @@ export function CustomTabList({
   userRole,
   ...props
 }: TabListProps & { userRole: Role }) {
+  const compact = useWindowDimensions().width < 600;
   return (
     <View {...props} style={styles.tabListContainer}>
       <ThemedView
         type="backgroundElement"
         style={styles.innerContainer}
       >
-        <ThemedText type="smallBold" style={styles.brandText}>
+        {!compact ? <ThemedText type="smallBold" style={styles.brandText}>
           Hadirin
-        </ThemedText>
+        </ThemedText> : null}
 
         {props.children}
 
-        <View style={styles.separator} />
+        {!compact ? <View style={styles.separator} /> : null}
 
-        <View style={styles.roleBadge}>
+        {!compact ? <View style={styles.roleBadge}>
           <View style={styles.roleDot} />
           <ThemedText type="smallBold" style={styles.roleBadgeText}>
             {userRole === 'asisten' ? 'Asisten' : 'Praktikan'}
           </ThemedText>
-        </View>
+        </View> : null}
       </ThemedView>
     </View>
   );
@@ -133,12 +135,12 @@ const styles = StyleSheet.create({
   },
   innerContainer: {
     paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.five,
+    paddingHorizontal: Spacing.two,
     borderRadius: Spacing.five,
     flexDirection: 'row',
     alignItems: 'center',
     flexGrow: 1,
-    gap: Spacing.two,
+    gap: Spacing.one,
     maxWidth: MaxContentWidth,
   },
   brandText: {
