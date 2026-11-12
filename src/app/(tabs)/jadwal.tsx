@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
+import { AsistenHome } from '@/components/asisten-home';
 import { useApp } from '@/context/app-context';
 import { practiceSessions } from '@/data/dummy-attendance';
 import type { SessionStatus } from '@/types/attendance';
@@ -30,6 +30,9 @@ export default function JadwalScreen() {
   const { currentUser } = useApp();
 
   const isAsisten = currentUser?.role === 'asisten';
+  if (isAsisten) {
+    return <AsistenHome />;
+  }
   const paddingTop = Platform.OS === 'web' ? 100 : insets.top + 24;
 
   return (
@@ -85,10 +88,12 @@ export default function JadwalScreen() {
             <Pressable
               key={session.id}
               onPress={() =>
-                router.push({
-                  pathname: '/detail-sesi',
-                  params: { id: session.id },
-                })
+                isAsisten
+                  ? router.push(`/sessions/${session.id}` as any)
+                  : router.push({
+                      pathname: '/detail-sesi',
+                      params: { id: session.id },
+                    })
               }
               style={({ pressed }) => [
                 styles.scheduleCard,

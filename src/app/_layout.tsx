@@ -6,13 +6,14 @@ import {
 } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { authColors } from '@/components/auth-ui';
 import { AppProvider } from '@/context/app-context';
 import { AttendanceProvider } from '@/context/attendance-context';
 import { AuthProvider, useAuth } from '@/context/auth-context';
+import { AsistenProvider } from '../../features/asisten/AsistenContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -67,14 +68,14 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider
-      value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
-    >
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthProvider>
         <AppProvider>
           <AttendanceProvider>
-            <AnimatedSplashOverlay />
-            <RootNavigator />
+            <AsistenProvider>
+              <AnimatedSplashOverlay />
+              <RootNavigator />
+            </AsistenProvider>
           </AttendanceProvider>
         </AppProvider>
       </AuthProvider>
