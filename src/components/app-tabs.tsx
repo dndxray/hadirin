@@ -39,6 +39,14 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="kelas" hidden={!isAsisten}>
+        <NativeTabs.Trigger.Label>Kelas</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          src={require('@/assets/images/tabIcons/home.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="profil">
         <NativeTabs.Trigger.Label>Profil</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon

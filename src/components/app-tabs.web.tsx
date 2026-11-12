@@ -28,9 +28,14 @@ export default function AppTabs() {
       <TabList asChild>
         <CustomTabList userRole={role}>
           {role === 'asisten' ? (
-            <TabTrigger name="jadwal" href="/jadwal" asChild>
-              <TabButton>Jadwal</TabButton>
-            </TabTrigger>
+            <>
+              <TabTrigger name="jadwal" href="/jadwal" asChild>
+                <TabButton>Jadwal</TabButton>
+              </TabTrigger>
+              <TabTrigger name="kelas" href="/kelas" asChild>
+                <TabButton>Kelas</TabButton>
+              </TabTrigger>
+            </>
           ) : (
             <>
               <TabTrigger name="presensi" href="/presensi" asChild>
