@@ -3,16 +3,15 @@ import {
   useCallback,
   useContext,
   useMemo,
-  useState,
   type PropsWithChildren,
 } from 'react';
 
-import { DUMMY_USERS, usersByRole } from '@/data/dummy-attendance';
+import { useAuth } from '@/context/auth-context';
 import type { AppUser, Role } from '@/types/attendance';
 
 type AppContextValue = {
   currentUser: AppUser | null;
-  // userId opsional: bila kosong atau tidak ditemukan, pakai pengguna default peran itu
+  /** @deprecated Tidak dipakai lagi. Login dilakukan lewat Firebase di layar login. */
   login: (role: Role, userId?: string) => void;
   logout: () => void;
 };
@@ -20,14 +19,25 @@ type AppContextValue = {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: PropsWithChildren) {
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  const { profile, logout: signOutFirebase } = useAuth();
 
-  const login = useCallback((role: Role, userId?: string) => {
-    const user =
-      usersByRole[role].find((u) => u.id === userId) ?? DUMMY_USERS[role];
-    setCurrentUser(user);
-  }, []);
-  const logout = useCallback(() => setCurrentUser(null), []);
+  const currentUser = useMemo<AppUser | null>(
+    () =>
+      profile
+        ? {
+            id: profile.uid,
+            name: profile.name,
+            identifier: profile.email,
+            role: profile.role,
+          }
+        : null,
+    [profile],
+  );
+
+  const login = useCallback(() => {}, []);
+  const logout = useCallback(() => {
+    void signOutFirebase();
+  }, [signOutFirebase]);
 
   const value = useMemo(
     () => ({ currentUser, login, logout }),
