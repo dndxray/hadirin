@@ -1,132 +1,169 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useAttendanceTheme } from '@/constants/attendance-theme';
-import { BottomTabInset, MaxContentWidth } from '@/constants/theme';
+import { authColors } from '@/components/auth-ui';
+import { StateView } from '@/components/state-view';
+import { BottomTabInset } from '@/constants/theme';
 import { useApp } from '@/context/app-context';
 import { useAttendance } from '@/context/attendance-context';
 import { practiceSessions } from '@/data/dummy-attendance';
 import type { AttendanceRecord, PracticeSession } from '@/types/attendance';
-import { formatAttendanceDate, formatAttendanceTime } from '@/utils/attendance-format';
+import { initials } from '@/utils/home-format';
 
-type HistoryItem = {
-  record: AttendanceRecord;
-  session: PracticeSession;
-};
+const MONTHS = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+];
+
+type HistoryItem = { record: AttendanceRecord; session: PracticeSession };
+type Group = { label: string; items: HistoryItem[] };
+
+function monthLabel(ts: number) {
+  const d = new Date(ts);
+  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function dateLabel(ts: number) {
+  const d = new Date(ts);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
 
 export default function AttendanceHistoryScreen() {
-  const colors = useAttendanceTheme();
   const insets = useSafeAreaInsets();
   const { currentUser } = useApp();
   const { records } = useAttendance();
+  const [showFilter, setShowFilter] = useState(false);
+  const [course, setCourse] = useState<string | null>(null);
 
   const history: HistoryItem[] = records
-    .filter((record) => record.practitionerId === currentUser?.id)
+    .filter((r) => r.practitionerId === currentUser?.id)
     .map((record) => ({
       record,
-      session: practiceSessions.find((session) => session.id === record.sessionId),
+      session: practiceSessions.find((s) => s.id === record.sessionId),
     }))
     .filter((item): item is HistoryItem => item.session !== undefined)
-    .sort((first, second) => second.record.checkedInAt - first.record.checkedInAt);
+    .sort((a, b) => b.record.checkedInAt - a.record.checkedInAt);
+
+  const held = practiceSessions.filter((s) => s.status !== 'upcoming').length;
+  const percent = held > 0 ? Math.min(100, Math.round((history.length / held) * 100)) : 0;
+
+  const courses = Array.from(new Set(history.map((h) => h.session.courseName)));
+  const visible = course ? history.filter((h) => h.session.courseName === course) : history;
+
+  const groups: Group[] = [];
+  visible.forEach((item) => {
+    const label = monthLabel(item.record.checkedInAt);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(item);
+    else groups.push({ label, items: [item] });
+  });
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+    <View style={styles.screen}>
       <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: insets.top + 20,
-            paddingBottom: insets.bottom + BottomTabInset + 32,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}>
-        <View style={styles.contentWidth}>
-          <Text style={[styles.pageTitle, { color: colors.ink }]}>Riwayat kehadiran</Text>
-          <Text style={[styles.pageSubtitle, { color: colors.inkMuted }]}>
-            Catatan presensi milik {currentUser?.name} selama aplikasi berjalan.
-          </Text>
-
-          <View
-            style={[
-              styles.summary,
-              { backgroundColor: colors.primarySoft, borderColor: colors.border },
-            ]}>
-            <View>
-              <Text style={[styles.summaryLabel, { color: colors.inkMuted }]}>Total kehadiran</Text>
-              <Text style={[styles.summaryValue, { color: colors.primary }]}>{history.length}</Text>
-            </View>
-            <View style={styles.summaryIdentity}>
-              <Text style={[styles.identityName, { color: colors.ink }]}>
-                {currentUser?.name}
-              </Text>
-              <Text style={[styles.identityNumber, { color: colors.inkMuted }]}>
-                {currentUser?.identifier}
-              </Text>
-            </View>
+        contentContainerStyle={{ paddingBottom: insets.bottom + BottomTabInset + 40 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.header, { paddingTop: insets.top + 28 }]}>
+          <View style={styles.inner}>
+            <Text style={styles.title}>Riwayat Kehadiran</Text>
           </View>
+        </View>
 
-          {history.length === 0 ? (
-            <View style={styles.emptyState}>
-              <View style={[styles.emptySymbol, { backgroundColor: colors.surfaceMuted }]}>
-                <Text style={[styles.emptySymbolText, { color: colors.inkMuted }]}>0</Text>
+        <View style={styles.body}>
+          <View style={styles.inner}>
+            {/* Ringkasan */}
+            <View style={styles.summary}>
+              <View style={styles.summaryRow}>
+                <View>
+                  <Text style={styles.summaryBig}>{percent}%</Text>
+                  <Text style={styles.summaryLabel}>Tingkat Kehadiran</Text>
+                </View>
+                <View>
+                  <Text style={styles.summaryBig}>{history.length}</Text>
+                  <Text style={styles.summaryLabel}>Total Hadir</Text>
+                </View>
               </View>
-              <Text style={[styles.emptyTitle, { color: colors.ink }]}>Belum ada presensi</Text>
-              <Text style={[styles.emptyDescription, { color: colors.inkMuted }]}>
-                Saat presensi berhasil, sesi yang kamu hadiri akan muncul di sini.
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => router.push('/')}
-                style={({ pressed }) => [
-                  styles.emptyButton,
-                  {
-                    borderColor: colors.primary,
-                    opacity: pressed ? 0.65 : 1,
-                  },
-                ]}>
-                <Text style={[styles.emptyButtonText, { color: colors.primary }]}>Lihat sesi aktif</Text>
-              </Pressable>
+              <View style={styles.track}>
+                <View style={[styles.fill, { width: `${percent}%` }]} />
+              </View>
             </View>
-          ) : (
-            <View style={styles.timelineSection}>
-              <Text style={[styles.sectionTitle, { color: colors.ink }]}>Catatan terbaru</Text>
-              <View>
-                {history.map(({ record, session }, index) => (
-                  <View key={record.id} style={styles.timelineRow}>
-                    <View style={styles.timelineMarker}>
-                      <View style={[styles.timelineDot, { backgroundColor: colors.success }]} />
-                      {index < history.length - 1 ? (
-                        <View style={[styles.timelineLine, { backgroundColor: colors.border }]} />
+
+            {history.length === 0 ? (
+              <View style={{ marginTop: 24 }}>
+                <StateView
+                  kind="empty"
+                  title="Belum ada presensi"
+                  message="Saat presensi berhasil, sesi yang kamu hadiri akan muncul di sini."
+                  actionLabel="Lihat Sesi"
+                  onAction={() => router.push('/presensi')}
+                />
+              </View>
+            ) : (
+              <>
+                {showFilter ? (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterChips}
+                  >
+                    {[null, ...courses].map((c) => {
+                      const active = course === c;
+                      return (
+                        <Pressable
+                          key={c ?? 'semua'}
+                          onPress={() => setCourse(c)}
+                          style={[styles.chip, active && styles.chipActive]}
+                        >
+                          <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                            {c ?? 'Semua'}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                ) : null}
+
+                {groups.map((g, gi) => (
+                  <View key={g.label}>
+                    <View style={styles.groupRow}>
+                      <Text style={styles.groupTitle}>{g.label}</Text>
+                      {gi === 0 ? (
+                        <Pressable
+                          style={styles.filterPill}
+                          onPress={() => setShowFilter((v) => !v)}
+                        >
+                          <Ionicons name="funnel-outline" size={12} color={authColors.navy} />
+                          <Text style={styles.filterText}>Filter</Text>
+                        </Pressable>
                       ) : null}
                     </View>
 
-                    <View
-                      style={[
-                        styles.historyCard,
-                        { backgroundColor: colors.surface, borderColor: colors.border },
-                      ]}>
-                      <View style={styles.historyHeading}>
-                        <Text style={[styles.historyStatus, { color: colors.success }]}>Hadir</Text>
-                        <Text style={[styles.historyTime, { color: colors.inkMuted }]}>
-                          {formatAttendanceTime(record.checkedInAt)}
-                        </Text>
+                    {g.items.map(({ record, session }) => (
+                      <View key={record.id} style={styles.card}>
+                        <View style={styles.cardAvatar}>
+                          <Text style={styles.cardAvatarText}>{initials(session.courseName)}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.cardTitle} numberOfLines={1}>
+                            {session.courseName}
+                          </Text>
+                          <Text style={styles.cardDate}>{dateLabel(record.checkedInAt)}</Text>
+                        </View>
+                        <View style={styles.badge}>
+                          <View style={styles.badgeDot} />
+                          <Text style={styles.badgeText}>Hadir</Text>
+                        </View>
                       </View>
-                      <Text style={[styles.courseName, { color: colors.ink }]}>
-                        {session.courseName}
-                      </Text>
-                      <Text style={[styles.historyMeta, { color: colors.inkMuted }]}>
-                        {session.className} · {session.room}
-                      </Text>
-                      <Text style={[styles.historyDate, { color: colors.inkMuted }]}>
-                        {formatAttendanceDate(record.checkedInAt)}
-                      </Text>
-                    </View>
+                    ))}
                   </View>
                 ))}
-              </View>
-            </View>
-          )}
+              </>
+            )}
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -134,169 +171,106 @@ export default function AttendanceHistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  scrollContent: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  contentWidth: {
-    maxWidth: MaxContentWidth,
-    width: '100%',
-  },
-  pageTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-    lineHeight: 38,
-  },
-  pageSubtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 7,
-  },
-  summary: {
-    alignItems: 'center',
-    borderRadius: 22,
-    borderWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 28,
-    padding: 20,
-  },
-  summaryLabel: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  summaryValue: {
-    fontSize: 38,
-    fontWeight: '900',
-    letterSpacing: -1,
-    lineHeight: 44,
-    marginTop: 2,
-  },
-  summaryIdentity: {
-    alignItems: 'flex-end',
-    flex: 1,
-    marginLeft: 24,
-  },
-  identityName: {
-    fontSize: 16,
-    fontWeight: '800',
-    lineHeight: 22,
-  },
-  identityNumber: {
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  emptyState: {
-    alignItems: 'center',
+  screen: { flex: 1, backgroundColor: authColors.background },
+  inner: { width: '100%', maxWidth: 560, alignSelf: 'center' },
+
+  header: {
+    backgroundColor: authColors.white,
     paddingHorizontal: 24,
-    paddingTop: 70,
+    paddingBottom: 22,
   },
-  emptySymbol: {
-    alignItems: 'center',
-    borderRadius: 34,
-    height: 68,
-    justifyContent: 'center',
-    width: 68,
+  title: { color: authColors.navy, fontSize: 26, fontWeight: '800' },
+
+  body: { paddingHorizontal: 20, paddingTop: 16 },
+
+  summary: {
+    backgroundColor: authColors.navy,
+    borderRadius: 20,
+    padding: 20,
+    gap: 14,
+    shadowColor: '#1B2A4E',
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
   },
-  emptySymbolText: {
-    fontSize: 25,
-    fontWeight: '800',
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingRight: 24 },
+  summaryBig: { color: authColors.white, fontSize: 30, fontWeight: '800' },
+  summaryLabel: { color: '#B6C2DB', fontSize: 11, marginTop: 2 },
+  track: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    overflow: 'hidden',
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    lineHeight: 26,
-    marginTop: 20,
-  },
-  emptyDescription: {
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 7,
-    maxWidth: 330,
-    textAlign: 'center',
-  },
-  emptyButton: {
-    alignItems: 'center',
-    borderRadius: 14,
+  fill: { height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+
+  filterChips: { gap: 8, paddingTop: 16 },
+  chip: {
+    borderRadius: 999,
     borderWidth: 1,
-    justifyContent: 'center',
-    marginTop: 22,
-    minHeight: 48,
-    paddingHorizontal: 20,
+    borderColor: authColors.border,
+    backgroundColor: authColors.white,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
-  emptyButtonText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  timelineSection: {
-    marginTop: 30,
-  },
-  sectionTitle: {
-    fontSize: 19,
-    fontWeight: '800',
-    lineHeight: 25,
-    marginBottom: 16,
-  },
-  timelineRow: {
+  chipActive: { backgroundColor: authColors.navy, borderColor: authColors.navy },
+  chipText: { color: authColors.ink, fontSize: 12, fontWeight: '600' },
+  chipTextActive: { color: authColors.white },
+
+  groupRow: {
     flexDirection: 'row',
-  },
-  timelineMarker: {
     alignItems: 'center',
-    marginRight: 13,
-    width: 14,
-  },
-  timelineDot: {
-    borderRadius: 7,
-    height: 14,
-    marginTop: 20,
-    width: 14,
-  },
-  timelineLine: {
-    flex: 1,
-    marginVertical: 5,
-    width: 2,
-  },
-  historyCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    flex: 1,
-    marginBottom: 14,
-    padding: 18,
-  },
-  historyHeading: {
-    alignItems: 'center',
-    flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 24,
+    marginBottom: 12,
   },
-  historyStatus: {
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 18,
+  groupTitle: { color: authColors.ink, fontSize: 20, fontWeight: '800' },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#DCE6FB',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  historyTime: {
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 17,
+  filterText: { color: authColors.navy, fontSize: 11, fontWeight: '800' },
+
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: authColors.white,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
+    shadowColor: '#1B2A4E',
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 3,
   },
-  courseName: {
-    fontSize: 17,
-    fontWeight: '800',
-    lineHeight: 23,
-    marginTop: 15,
+  cardAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: authColors.navy,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  historyMeta: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 5,
+  cardAvatarText: { color: authColors.white, fontWeight: '800', fontSize: 14 },
+  cardTitle: { color: authColors.ink, fontSize: 14, fontWeight: '800' },
+  cardDate: { color: authColors.muted, fontSize: 11, marginTop: 2 },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#E6F6EC',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
-  historyDate: {
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 12,
-  },
+  badgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+  badgeText: { color: '#15803D', fontSize: 11, fontWeight: '700' },
 });
