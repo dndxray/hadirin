@@ -1,422 +1,291 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import {
-  AccessibilityInfo,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  AttendanceConfirmationModal,
-  type AttendanceModalPhase,
-} from '@/components/attendance-confirmation-modal';
-import { SessionStatusBadge } from '@/components/session-status-badge';
-import { useAttendanceTheme } from '@/constants/attendance-theme';
-import { BottomTabInset, MaxContentWidth } from '@/constants/theme';
+import { authColors } from '@/components/auth-ui';
+import { StateView } from '@/components/state-view';
+import { BottomTabInset } from '@/constants/theme';
 import { useApp } from '@/context/app-context';
 import { useAttendance } from '@/context/attendance-context';
 import { practiceSessions } from '@/data/dummy-attendance';
-import { formatAttendanceTime } from '@/utils/attendance-format';
+import type { SessionStatus } from '@/types/attendance';
+import { greeting, initials, todayLabel } from '@/utils/home-format';
 
-export default function AttendanceScreen() {
-  const colors = useAttendanceTheme();
+const STATUS: Record<SessionStatus, { label: string; dot: string; bg: string; fg: string }> = {
+  open: { label: 'Dibuka', dot: '#22C55E', bg: '#E6F6EC', fg: '#15803D' },
+  upcoming: { label: 'Belum Dibuka', dot: '#94A3B8', bg: '#EEF1F6', fg: '#64748B' },
+  closed: { label: 'Ditutup', dot: '#EF4444', bg: '#FEE2E2', fg: '#B91C1C' },
+};
+
+export default function PraktikanHomeScreen() {
   const insets = useSafeAreaInsets();
   const { currentUser } = useApp();
-  const { checkIn, records, hasAttended } = useAttendance();
-  const [modalPhase, setModalPhase] = useState<AttendanceModalPhase>('closed');
+  const { hasAttended } = useAttendance();
+  const [query, setQuery] = useState('');
 
-  const paddingTop = Platform.OS === 'web' ? 100 : insets.top + 20;
+  const name = currentUser?.name ?? '';
+  const firstName = name.split(/\s+/)[0] || 'Praktikan';
 
-  const activeSession =
-    practiceSessions.find((session) => session.status === 'open') ?? practiceSessions[0];
-  const otherSessions = practiceSessions.filter((session) => session.id !== activeSession.id);
-  const attended = hasAttended(activeSession.id);
-  const attendanceRecord = records.find(
-    (record) =>
-      record.sessionId === activeSession.id &&
-      record.practitionerId === currentUser?.id,
+  const q = query.trim().toLowerCase();
+  const sessions = practiceSessions.filter(
+    (s) =>
+      !q ||
+      s.courseName.toLowerCase().includes(q) ||
+      s.className.toLowerCase().includes(q) ||
+      s.room.toLowerCase().includes(q),
   );
 
-  const confirmAttendance = () => {
-    const result = checkIn(activeSession.id);
-
-    if (result === 'success') {
-      setModalPhase('success');
-      AccessibilityInfo.announceForAccessibility('Presensi berhasil dicatat.');
-      return;
-    }
-
-    setModalPhase(result === 'already-recorded' ? 'duplicate' : 'unavailable');
-  };
-
-  const viewHistory = () => {
-    setModalPhase('closed');
-    router.push('/explore');
-  };
-
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+    <View style={styles.screen}>
       <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop,
-            paddingBottom: insets.bottom + BottomTabInset + 32,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}>
-        <View style={styles.contentWidth}>
-          <View style={styles.header}>
-            <View>
-              <Text style={[styles.greeting, { color: colors.inkMuted }]}>Selamat datang,</Text>
-              <Text style={[styles.practitionerName, { color: colors.ink }]}>
-                {currentUser?.name}
-              </Text>
+        contentContainerStyle={{ paddingBottom: insets.bottom + BottomTabInset + 40 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[styles.header, { paddingTop: insets.top + 36 }]}>
+          <View style={[styles.inner, styles.headerRow]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.greeting}>{greeting()}</Text>
+              <Text style={styles.hello}>Hai, {firstName}</Text>
             </View>
-            <View
-              accessibilityLabel={`Identitas ${currentUser?.identifier}`}
-              style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
-              <Text style={[styles.avatarText, { color: colors.primary }]}>
-                {currentUser?.name.charAt(0)}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.titleBlock}>
-            <Text style={[styles.pageTitle, { color: colors.ink }]}>Sesi aktifmu</Text>
-            <Text style={[styles.pageSubtitle, { color: colors.inkMuted }]}>
-              Presensi tersedia selama asisten membuka sesi.
-            </Text>
-          </View>
-
-          <View
-            style={[
-              styles.activeCard,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}>
-            <View style={[styles.statusRail, { backgroundColor: colors.success }]} />
-            <View style={styles.activeCardContent}>
-              <SessionStatusBadge status={activeSession.status} />
-
-              <Text style={[styles.courseName, { color: colors.ink }]}>
-                {activeSession.courseName}
-              </Text>
-              <Text style={[styles.className, { color: colors.inkMuted }]}>
-                {activeSession.className} · Asisten {activeSession.assistantName}
-              </Text>
-
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-              <View style={styles.metadataGrid}>
-                <View style={styles.metadataItem}>
-                  <Text style={[styles.metadataLabel, { color: colors.inkMuted }]}>Waktu</Text>
-                  <Text style={[styles.metadataValue, { color: colors.ink }]}>
-                    {activeSession.timeRange}
-                  </Text>
-                </View>
-                <View style={styles.metadataItem}>
-                  <Text style={[styles.metadataLabel, { color: colors.inkMuted }]}>Ruangan</Text>
-                  <Text style={[styles.metadataValue, { color: colors.ink }]}>
-                    {activeSession.room}
-                  </Text>
-                </View>
-              </View>
-              <Text style={[styles.dateText, { color: colors.inkMuted }]}>
-                {activeSession.dateLabel}
-              </Text>
-
-              {attended && attendanceRecord ? (
-                <View style={[styles.recordedNote, { backgroundColor: colors.successSoft }]}>
-                  <View style={[styles.checkCircle, { backgroundColor: colors.success }]}>
-                    <Text style={[styles.checkText, { color: colors.background }]}>✓</Text>
-                  </View>
-                  <View style={styles.recordedCopy}>
-                    <Text style={[styles.recordedTitle, { color: colors.success }]}>Sudah hadir</Text>
-                    <Text style={[styles.recordedTime, { color: colors.inkMuted }]}>
-                      Tercatat pukul {formatAttendanceTime(attendanceRecord.checkedInAt)}
-                    </Text>
-                  </View>
-                </View>
-              ) : null}
-
-              <Pressable
-                accessibilityHint={
-                  attended
-                    ? 'Presensi untuk sesi ini telah tercatat'
-                    : 'Membuka konfirmasi pencatatan kehadiran'
-                }
-                accessibilityRole="button"
-                accessibilityState={{ disabled: attended }}
-                disabled={attended}
-                onPress={() => setModalPhase('confirm')}
-                style={({ pressed }) => [
-                  styles.attendanceButton,
-                  {
-                    backgroundColor: attended ? colors.surfaceMuted : colors.primary,
-                    opacity: pressed ? 0.82 : 1,
-                  },
-                ]}>
-                <Text
-                  style={[
-                    styles.attendanceButtonText,
-                    { color: attended ? colors.inkMuted : colors.background },
-                  ]}>
-                  {attended ? 'Presensi sudah tercatat' : 'Isi presensi sekarang'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.otherSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.ink }]}>Jadwal praktikum</Text>
-              <Pressable
-                accessibilityRole="link"
-                onPress={() => router.push('/jadwal')}
-                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-                <Text style={[styles.seeAll, { color: colors.primary }]}>Jadwal lainnya →</Text>
-              </Pressable>
-            </View>
-
-            <View style={[styles.sessionList, { borderColor: colors.border }]}>
-              {otherSessions.slice(0, 2).map((session, index, list) => (
-                <Pressable
-                  key={session.id}
-                  accessibilityRole="button"
-                  onPress={() =>
-                    router.push({ pathname: '/detail-sesi', params: { id: session.id } })
-                  }
-                  style={({ pressed }) => [
-                    styles.sessionRow,
-                    index < list.length - 1 && {
-                      borderBottomColor: colors.border,
-                      borderBottomWidth: StyleSheet.hairlineWidth,
-                    },
-                    pressed && { opacity: 0.65 },
-                  ]}>
-                  <View style={styles.sessionRowCopy}>
-                    <Text style={[styles.sessionRowName, { color: colors.ink }]}>
-                      {session.courseName}
-                    </Text>
-                    <Text style={[styles.sessionRowMeta, { color: colors.inkMuted }]}>
-                      {session.className} · {session.dateLabel}
-                    </Text>
-                    <Text style={[styles.sessionRowMeta, { color: colors.inkMuted }]}>
-                      {session.timeRange} · {session.room}
-                    </Text>
-                  </View>
-                  <SessionStatusBadge status={session.status} />
-                </Pressable>
-              ))}
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials(name)}</Text>
             </View>
           </View>
         </View>
-      </ScrollView>
 
-      <AttendanceConfirmationModal
-        attendanceTime={
-          attendanceRecord ? formatAttendanceTime(attendanceRecord.checkedInAt) : undefined
-        }
-        onClose={() => setModalPhase('closed')}
-        onConfirm={confirmAttendance}
-        onViewHistory={viewHistory}
-        phase={modalPhase}
-        session={activeSession}
-      />
+        <View style={styles.body}>
+          <View style={styles.inner}>
+            <View style={styles.search}>
+              <Ionicons name="search-outline" size={18} color={authColors.muted} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Cari mata praktikum"
+                placeholderTextColor={authColors.placeholder}
+                value={query}
+                onChangeText={setQuery}
+              />
+              {query ? (
+                <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                  <Ionicons name="close-circle" size={18} color={authColors.placeholder} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <Text style={styles.sectionTitle}>Jadwal Praktikum</Text>
+
+            <View style={styles.dateBanner}>
+              <View style={styles.dateIcon}>
+                <Ionicons name="calendar-outline" size={22} color={authColors.white} />
+              </View>
+              <View>
+                <Text style={styles.dateTitle}>{todayLabel()}</Text>
+                <Text style={styles.dateSub}>{practiceSessions.length} sesi terjadwal</Text>
+              </View>
+            </View>
+
+            {practiceSessions.length === 0 ? (
+              <StateView
+                kind="empty"
+                title="Belum ada jadwal praktikum"
+                message="Jadwal praktikum yang tersedia akan muncul di sini."
+              />
+            ) : sessions.length === 0 ? (
+              <StateView
+                kind="empty"
+                title="Tidak ditemukan"
+                message={`Tidak ada praktikum yang cocok dengan "${query}".`}
+              />
+            ) : (
+              sessions.map((s) => {
+                const st = STATUS[s.status];
+                const attended = hasAttended(s.id);
+                return (
+                  <Pressable
+                    key={s.id}
+                    style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
+                    onPress={() =>
+                      router.push({ pathname: '/detail-sesi', params: { id: s.id } })
+                    }
+                  >
+                    <View style={[styles.chip, { backgroundColor: st.bg }]}>
+                      <View style={[styles.chipDot, { backgroundColor: st.dot }]} />
+                      <Text style={[styles.chipText, { color: st.fg }]}>{st.label}</Text>
+                    </View>
+
+                    <View style={styles.cardTop}>
+                      <View style={styles.cardAvatar}>
+                        <Text style={styles.cardAvatarText}>{initials(s.courseName)}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.cardTitle} numberOfLines={2}>
+                          {s.courseName}
+                        </Text>
+                        <Text style={styles.cardSub}>
+                          {s.className} · {s.room}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={22} color={authColors.ink} />
+                    </View>
+
+                    <View style={styles.divider} />
+
+                    <View style={styles.footer}>
+                      <View style={styles.timeRow}>
+                        <Ionicons name="time-outline" size={14} color={authColors.muted} />
+                        <Text style={styles.timeText}>
+                          {s.dateLabel} · {s.timeRange}
+                        </Text>
+                      </View>
+                      {attended ? (
+                        <View style={styles.attended}>
+                          <Ionicons name="checkmark" size={12} color="#15803D" />
+                          <Text style={styles.attendedText}>Sudah hadir</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                );
+              })
+            )}
+          </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  scrollContent: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  contentWidth: {
-    maxWidth: MaxContentWidth,
-    width: '100%',
-  },
+  screen: { flex: 1, backgroundColor: authColors.background },
+  inner: { width: '100%', maxWidth: 560, alignSelf: 'center' },
+
   header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: authColors.navy,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingBottom: 70,
   },
-  greeting: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  practitionerName: {
-    fontSize: 20,
-    fontWeight: '800',
-    lineHeight: 26,
-  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  greeting: { color: '#B6C2DB', fontSize: 14 },
+  hello: { color: authColors.white, fontSize: 32, fontWeight: '800', marginTop: 2 },
   avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#F6D9C9',
     alignItems: 'center',
-    borderRadius: 22,
-    height: 44,
     justifyContent: 'center',
-    width: 44,
   },
-  avatarText: {
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  titleBlock: {
-    marginBottom: 22,
-    marginTop: 34,
-  },
-  pageTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-    lineHeight: 38,
-  },
-  pageSubtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 6,
-  },
-  activeCard: {
-    borderRadius: 24,
-    borderWidth: 1,
+  avatarText: { color: '#8B4A2B', fontWeight: '800', fontSize: 16 },
+
+  body: { paddingHorizontal: 20, marginTop: -30 },
+
+  search: {
     flexDirection: 'row',
-    overflow: 'hidden',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: authColors.white,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    minHeight: 50,
+    shadowColor: '#1B2A4E',
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
-  statusRail: {
-    width: 6,
-  },
-  activeCardContent: {
-    flex: 1,
-    padding: 20,
-  },
-  courseName: {
-    fontSize: 23,
+  searchInput: { flex: 1, color: authColors.ink, fontSize: 14, paddingVertical: 12 },
+
+  sectionTitle: {
+    color: authColors.ink,
+    fontSize: 22,
     fontWeight: '800',
-    letterSpacing: -0.4,
-    lineHeight: 29,
-    marginTop: 22,
+    marginTop: 26,
+    marginBottom: 14,
   },
-  className: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 5,
+
+  dateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: '#E3E9F5',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
   },
+  dateIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: authColors.navy,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateTitle: { color: authColors.ink, fontSize: 16, fontWeight: '800' },
+  dateSub: { color: '#6B7FBF', fontSize: 12, marginTop: 2 },
+
+  card: {
+    backgroundColor: authColors.white,
+    borderRadius: 18,
+    padding: 16,
+    paddingTop: 20,
+    marginBottom: 14,
+    shadowColor: '#1B2A4E',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  chip: {
+    position: 'absolute',
+    top: 12,
+    right: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  chipDot: { width: 6, height: 6, borderRadius: 3 },
+  chipText: { fontSize: 10, fontWeight: '700' },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 8 },
+  cardAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: authColors.navy,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardAvatarText: { color: authColors.white, fontWeight: '800', fontSize: 15 },
+  cardTitle: { color: authColors.ink, fontSize: 16, fontWeight: '800' },
+  cardSub: { color: authColors.muted, fontSize: 12, marginTop: 2 },
   divider: {
     height: StyleSheet.hairlineWidth,
-    marginVertical: 20,
+    backgroundColor: authColors.border,
+    marginVertical: 14,
   },
-  metadataGrid: {
+  footer: {
     flexDirection: 'row',
-    gap: 16,
-  },
-  metadataItem: {
-    flex: 1,
-  },
-  metadataLabel: {
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  metadataValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 21,
-    marginTop: 3,
-  },
-  dateText: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 12,
-  },
-  recordedNote: {
     alignItems: 'center',
-    borderRadius: 14,
-    flexDirection: 'row',
-    marginTop: 20,
-    padding: 13,
-  },
-  checkCircle: {
-    alignItems: 'center',
-    borderRadius: 16,
-    height: 32,
-    justifyContent: 'center',
-    width: 32,
-  },
-  checkText: {
-    fontSize: 17,
-    fontWeight: '900',
-  },
-  recordedCopy: {
-    flex: 1,
-    marginLeft: 11,
-  },
-  recordedTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 19,
-  },
-  recordedTime: {
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  attendanceButton: {
-    alignItems: 'center',
-    borderRadius: 15,
-    justifyContent: 'center',
-    marginTop: 20,
-    minHeight: 54,
-    paddingHorizontal: 20,
-  },
-  attendanceButtonText: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  otherSection: {
-    marginTop: 32,
-  },
-  sectionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  sectionTitle: {
-    fontSize: 19,
-    fontWeight: '800',
-    lineHeight: 25,
-  },
-  seeAll: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  sessionList: {
-    borderBottomWidth: 1,
-    borderTopWidth: 1,
-  },
-  sessionRow: {
-    alignItems: 'flex-start',
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  timeText: { color: authColors.muted, fontSize: 12 },
+  attended: {
     flexDirection: 'row',
-    gap: 14,
-    paddingVertical: 16,
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#E6F6EC',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  sessionRowCopy: {
-    flex: 1,
-  },
-  sessionRowName: {
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 21,
-  },
-  sessionRowMeta: {
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 4,
-  },
+  attendedText: { color: '#15803D', fontSize: 11, fontWeight: '700' },
 });
