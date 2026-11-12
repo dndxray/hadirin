@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAsisten() {
+      return signedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'asisten';
+    }
+
+    // Profil akun
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAsisten());
+      allow create: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.role in ['asisten', 'praktikan'];
+      allow update: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.role == resource.data.role;
+      allow delete: if false;
+    }
+
+    // Kelas dan peserta
+    match /classes/{classId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAsisten();
+    }
+  }
+}
