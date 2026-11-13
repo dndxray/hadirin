@@ -1,52 +1,23 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import { authColors } from '@/components/auth-ui';
-import { StateView } from '@/components/state-view';
 import { useAsisten } from '../../../../features/asisten/AsistenContext';
+import { SessionStatusBadge } from '../../../../features/asisten/components/SessionStatusBadge';
 import { ConfirmModal } from '../../../../features/asisten/components/ConfirmModal';
-import { dummyRoster } from '../../../../features/asisten/dummyData';
-import { formatDate, formatTime } from '../../../../features/asisten/utils/format';
-
-type Filter = 'semua' | 'hadir' | 'belum' | 'izin';
-type Row = {
-  nim: string;
-  name: string;
-  state: 'hadir' | 'terlambat' | 'belum';
-  time?: string;
-};
-
-const STATUS = {
-  OPEN: { label: 'Sesi sedang dibuka', bg: '#E6F6EC', fg: '#15803D' },
-  CLOSED: { label: 'Sesi belum dibuka', bg: '#F1F4F9', fg: '#64748B' },
-  ENDED: { label: 'Sesi telah ditutup', bg: '#FEE2E2', fg: '#B91C1C' },
-} as const;
-
-const AVATARS = [
-  { bg: '#FDE7D6', fg: '#C2410C' },
-  { bg: '#DCE6FB', fg: '#1D4ED8' },
-  { bg: '#DDF3E4', fg: '#15803D' },
-  { bg: '#EBDDF7', fg: '#7E22CE' },
-];
-
-function initials(text: string) {
-  return (
-    text
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join('')
-      .toUpperCase() || '?'
-  );
-}
-
-function shortTime(iso: string) {
-  return formatTime(iso).slice(0, 5).replace(':', '.');
-}
+import { AttendanceRow } from '../../../../features/asisten/components/AttendanceRow';
+import { EmptyState } from '../../../../features/asisten/components/EmptyState';
+import { theme } from '../../../../features/asisten/theme';
+import { formatDate } from '../../../../features/asisten/utils/format';
 
 export default function SessionDetailScreen() {
   const params = useLocalSearchParams<{ sessionId: string }>();
@@ -54,438 +25,365 @@ export default function SessionDetailScreen() {
   const insets = useSafeAreaInsets();
   const { getSession, getAttendances, openSession, closeSession } = useAsisten();
 
-  const [filter, setFilter] = useState<Filter>('semua');
-  const [expanded, setExpanded] = useState(false);
-  const [confirm, setConfirm] = useState<'open' | 'close' | null>(null);
-
   const session = getSession(params.sessionId);
+  const allAttendances = session ? getAttendances(session.id) : [];
+
+  const [showConfirmOpen, setShowConfirmOpen] = useState(false);
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const filteredAttendances = (() => {
+    if (!query.trim()) {
+      return allAttendances;
+    }
+    const lowerQuery = query.toLowerCase();
+    return allAttendances.filter(
+      (att) =>
+        att.practitionerName.toLowerCase().includes(lowerQuery) ||
+        att.practitionerNim.includes(lowerQuery)
+    );
+  })();
+
+  const handleOpenSession = () => {
+    if (session) {
+      openSession(session.id);
+      setShowConfirmOpen(false);
+    }
+  };
+
+  const handleCloseSession = () => {
+    if (session) {
+      closeSession(session.id);
+      setShowConfirmClose(false);
+    }
+  };
 
   if (!session) {
     return (
-      <View style={[styles.screen, { paddingTop: insets.top + 40, paddingHorizontal: 20 }]}>
-        <View style={styles.inner}>
-          <StateView
-            kind="error"
-            title="Sesi tidak ditemukan"
-            message="Sesi yang kamu cari tidak tersedia."
-            actionLabel="Kembali"
-            onAction={() => router.replace('/jadwal')}
-          />
+      <View style={styles.container}>
+        <EmptyState
+          icon="⚠️"
+          title="Sesi tidak ditemukan"
+          subtitle="Sesi yang Anda cari tidak tersedia."
+        />
+        <View style={styles.centerButton}>
+          <Pressable
+            style={[styles.button, { backgroundColor: theme.colors.primary }]}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.buttonText}>Kembali ke Jadwal</Text>
+          </Pressable>
         </View>
       </View>
     );
   }
 
-  const attendances = getAttendances(session.id);
-  const attendedByNim = new Map(attendances.map((a) => [a.practitionerNim, a]));
+  const displayDate = formatDate(session.date);
+  const totalAttendances = allAttendances.length;
+  const hasAttendances = totalAttendances > 0;
 
-  const toRow = (nim: string, name: string): Row => {
-    const a = attendedByNim.get(nim);
-    if (!a) return { nim, name, state: 'belum' };
+  const getEmptyStateText = () => {
+    if (session.status === 'CLOSED') {
+      return {
+        icon: '📝',
+        title: 'Belum ada praktikan yang presensi',
+        subtitle: 'Buka sesi untuk memulai.',
+      };
+    }
+    if (session.status === 'OPEN') {
+      return {
+        icon: '⏳',
+        title: 'Belum ada praktikan yang presensi',
+        subtitle: 'Menunggu praktikan melakukan presensi.',
+      };
+    }
     return {
-      nim,
-      name,
-      state: a.status === 'LATE' ? 'terlambat' : 'hadir',
-      time: shortTime(a.checkedInAt),
+      icon: '📭',
+      title: 'Tidak ada praktikan yang presensi',
+      subtitle: 'Tidak ada praktikan yang presensi pada sesi ini.',
     };
   };
 
-  const rows: Row[] = [
-    ...dummyRoster.map((p) => toRow(p.nim, p.name)),
-    ...attendances
-      .filter((a) => !dummyRoster.some((p) => p.nim === a.practitionerNim))
-      .map((a) => toRow(a.practitionerNim, a.practitionerName)),
-  ];
+  const emptyState = getEmptyStateText();
 
-  const total = rows.length;
-  const hadirCount = rows.filter((r) => r.state !== 'belum').length;
-  const belumCount = total - hadirCount;
-  const progress = total > 0 ? hadirCount / total : 0;
+  const renderHeader = () => (
+    <View>
+      <View style={styles.infoCard}>
+        <View style={styles.infoHeader}>
+          <View style={styles.infoTitleSection}>
+            <Text style={styles.courseName}>{session.courseName}</Text>
+            <Text style={styles.courseCode}>{session.courseCode}</Text>
+          </View>
+          <SessionStatusBadge status={session.status} />
+        </View>
 
-  const visible = rows.filter((r) => {
-    if (filter === 'hadir') return r.state !== 'belum';
-    if (filter === 'belum') return r.state === 'belum';
-    if (filter === 'izin') return false;
-    return true;
-  });
-  const shown = expanded ? visible : visible.slice(0, 4);
+        <View style={styles.infoDetails}>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Kelas:</Text>
+            <Text style={styles.infoValue}>{session.kelas}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Tanggal:</Text>
+            <Text style={styles.infoValue}>{displayDate}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Waktu:</Text>
+            <Text style={styles.infoValue}>
+              {session.startTime} - {session.endTime}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Ruangan:</Text>
+            <Text style={styles.infoValue}>{session.room}</Text>
+          </View>
+          {session.description && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Deskripsi:</Text>
+              <Text style={styles.infoValue}>{session.description}</Text>
+            </View>
+          )}
+        </View>
+      </View>
 
-  const chips: { key: Filter; label: string }[] = [
-    { key: 'semua', label: `Semua (${total})` },
-    { key: 'hadir', label: `Hadir (${hadirCount})` },
-    { key: 'belum', label: `Belum Hadir (${belumCount})` },
-    { key: 'izin', label: 'Izin/Sakit (0)' },
-  ];
+      <View style={styles.actionSection}>
+        {session.status === 'CLOSED' && (
+          <Pressable
+            style={[
+              styles.button,
+              styles.actionButton,
+              { backgroundColor: theme.colors.green },
+            ]}
+            onPress={() => setShowConfirmOpen(true)}
+          >
+            <Text style={styles.buttonText}>Buka Sesi</Text>
+          </Pressable>
+        )}
 
-  const status = STATUS[session.status];
-  const timeRange = `${session.startTime.replace(':', '.')} - ${session.endTime.replace(':', '.')} WIB`;
+        {session.status === 'OPEN' && (
+          <Pressable
+            style={[
+              styles.button,
+              styles.actionButton,
+              { backgroundColor: theme.colors.red },
+            ]}
+            onPress={() => setShowConfirmClose(true)}
+          >
+            <Text style={styles.buttonText}>Tutup Sesi</Text>
+          </Pressable>
+        )}
 
-  const handleConfirm = () => {
-    if (confirm === 'open') openSession(session.id);
-    if (confirm === 'close') closeSession(session.id);
-    setConfirm(null);
+        {session.status === 'ENDED' && (
+          <View style={styles.endedCard}>
+            <Text style={styles.endedText}>Sesi telah ditutup</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.attendanceSection}>
+        <View style={styles.attendanceHeader}>
+          <Text style={styles.sectionTitle}>Daftar Kehadiran</Text>
+          <Text style={styles.attendanceCount}>
+            {totalAttendances} praktikan sudah hadir
+          </Text>
+        </View>
+
+        {hasAttendances && (
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Cari nama atau NIM"
+            placeholderTextColor={theme.colors.textMuted}
+            value={query}
+            onChangeText={setQuery}
+          />
+        )}
+      </View>
+    </View>
+  );
+
+  const renderEmptyComponent = () => {
+    if (hasAttendances && filteredAttendances.length === 0) {
+      return (
+        <EmptyState
+          icon="🔍"
+          title={`Tidak ada hasil untuk "${query}"`}
+        />
+      );
+    }
+    if (!hasAttendances) {
+      return (
+        <EmptyState
+          icon={emptyState.icon}
+          title={emptyState.title}
+          subtitle={emptyState.subtitle}
+        />
+      );
+    }
+    return undefined;
   };
 
   return (
-    <View style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header navy */}
-        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <View style={styles.inner}>
-            <Pressable style={styles.backButton} onPress={() => router.replace('/jadwal')} hitSlop={8}>
-              <Ionicons name="chevron-back" size={20} color={authColors.white} />
-            </Pressable>
-
-            <Text style={styles.title}>{session.courseName}</Text>
-            <View style={styles.metaRow}>
-              <Ionicons name="business-outline" size={13} color="#B6C2DB" />
-              <Text style={styles.metaText}>Kelas {session.kelas}</Text>
-              <Text style={styles.metaDot}>•</Text>
-              <Ionicons name="desktop-outline" size={13} color="#B6C2DB" />
-              <Text style={styles.metaText}>{session.room}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.body}>
-          <View style={styles.inner}>
-            {/* Kartu status sesi */}
-            <View style={styles.statusCard}>
-              <View style={styles.statusTop}>
-                <View style={{ flex: 1, gap: 8, alignItems: 'flex-start' }}>
-                  <View style={[styles.statusChip, { backgroundColor: status.bg }]}>
-                    <Text style={[styles.statusChipText, { color: status.fg }]}>
-                      {status.label}
-                    </Text>
-                  </View>
-                  <View style={styles.timeRow}>
-                    <Ionicons name="time-outline" size={14} color={authColors.muted} />
-                    <Text style={styles.timeText}>
-                      {formatDate(session.date)} · {timeRange}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.peopleBox}>
-                  <Ionicons name="people-outline" size={22} color={authColors.navy} />
-                  {session.status === 'OPEN' ? <View style={styles.liveDot} /> : null}
-                </View>
-              </View>
-
-              {session.status === 'CLOSED' ? (
-                <Pressable
-                  style={[styles.actionButton, { backgroundColor: '#2FBF5B' }]}
-                  onPress={() => setConfirm('open')}
-                >
-                  <Text style={styles.actionText}>Buka Sesi</Text>
-                </Pressable>
-              ) : null}
-
-              {session.status === 'OPEN' ? (
-                <Pressable
-                  style={[styles.actionButton, { backgroundColor: '#EF4455' }]}
-                  onPress={() => setConfirm('close')}
-                >
-                  <Text style={styles.actionText}>Tutup Sesi</Text>
-                </Pressable>
-              ) : null}
-
-              {session.status === 'ENDED' ? (
-                <View style={styles.endedBox}>
-                  <Text style={styles.endedText}>Sesi ini sudah ditutup</Text>
-                </View>
-              ) : null}
-            </View>
-
-            {/* Rekap kehadiran */}
-            <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Praktikan Hadir</Text>
-              <View style={styles.countPill}>
-                <Text style={styles.countStrong}>{hadirCount}</Text>
-                <Text style={styles.countLight}> / {total}</Text>
-              </View>
-            </View>
-
-            <View style={styles.track}>
-              <View style={[styles.fill, { width: `${Math.round(progress * 100)}%` }]} />
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chips}
-            >
-              {chips.map((c) => {
-                const active = filter === c.key;
-                return (
-                  <Pressable
-                    key={c.key}
-                    onPress={() => {
-                      setFilter(c.key);
-                      setExpanded(false);
-                    }}
-                    style={[styles.chip, active && styles.chipActive]}
-                  >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {c.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            {/* Daftar praktikan */}
-            <View style={styles.listCard}>
-              {shown.length === 0 ? (
-                <Text style={styles.emptyText}>
-                  {total === 0
-                    ? 'Belum ada peserta di kelas ini.'
-                    : 'Tidak ada praktikan pada kategori ini.'}
-                </Text>
-              ) : (
-                shown.map((r, i) => {
-                  const color = AVATARS[i % AVATARS.length];
-                  return (
-                    <View
-                      key={r.nim}
-                      style={[styles.row, i < shown.length - 1 && styles.rowDivider]}
-                    >
-                      <View style={[styles.avatar, { backgroundColor: color.bg }]}>
-                        <Text style={[styles.avatarText, { color: color.fg }]}>
-                          {initials(r.name)}
-                        </Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.rowName}>{r.name}</Text>
-                        <Text style={styles.rowNim}>{r.nim}</Text>
-                      </View>
-
-                      {r.state === 'hadir' ? (
-                        <View style={[styles.badge, { backgroundColor: '#E6F6EC' }]}>
-                          <Ionicons name="checkmark" size={12} color="#15803D" />
-                          <Text style={[styles.badgeText, { color: '#15803D' }]}>{r.time}</Text>
-                        </View>
-                      ) : r.state === 'terlambat' ? (
-                        <View style={[styles.badge, { backgroundColor: '#FEF3C7' }]}>
-                          <Text style={[styles.badgeText, { color: '#B45309' }]}>
-                            Terlambat {r.time}
-                          </Text>
-                        </View>
-                      ) : (
-                        <View style={[styles.badge, { backgroundColor: '#F1F4F9' }]}>
-                          <Text style={[styles.badgeText, { color: '#64748B' }]}>Belum hadir</Text>
-                        </View>
-                      )}
-                    </View>
-                  );
-                })
-              )}
-            </View>
-
-            {visible.length > 4 ? (
-              <Pressable style={styles.seeAll} onPress={() => setExpanded((v) => !v)}>
-                <Text style={styles.seeAllText}>
-                  {expanded ? 'Tampilkan lebih sedikit' : `Lihat semua praktikan (${visible.length})`}
-                </Text>
-                <Ionicons
-                  name={expanded ? 'chevron-up' : 'chevron-forward'}
-                  size={14}
-                  color={authColors.ink}
-                />
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-      </ScrollView>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <FlatList
+        data={filteredAttendances}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={renderHeader()}
+        renderItem={({ item }) => <AttendanceRow attendance={item} />}
+        ListEmptyComponent={renderEmptyComponent()}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingBottom: insets.bottom + theme.spacing.lg },
+        ]}
+      />
 
       <ConfirmModal
-        visible={confirm === 'open'}
-        title="Buka Sesi?"
-        message="Apakah Anda yakin ingin membuka sesi praktikum"
-        confirmLabel="Ya, Buka Sesi"
+        visible={showConfirmOpen}
+        title="Buka Sesi"
+        message={`Buka sesi ${session.courseName} — Kelas ${session.kelas}? Praktikan akan dapat melakukan presensi.`}
+        confirmLabel="Buka"
         confirmColor="green"
-        onConfirm={handleConfirm}
-        onCancel={() => setConfirm(null)}
+        onConfirm={handleOpenSession}
+        onCancel={() => setShowConfirmOpen(false)}
       />
+
       <ConfirmModal
-        visible={confirm === 'close'}
+        visible={showConfirmClose}
         title="Tutup Sesi"
-        message="Apakah Anda yakin ingin menutup sesi praktikum"
-        confirmLabel="Ya, Tutup Sesi"
+        message="Tutup sesi? Setelah ditutup, praktikan tidak dapat presensi lagi."
+        confirmLabel="Tutup"
         confirmColor="red"
-        onConfirm={handleConfirm}
-        onCancel={() => setConfirm(null)}
+        onConfirm={handleCloseSession}
+        onCancel={() => setShowConfirmClose(false)}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: authColors.background },
-  inner: { width: '100%', maxWidth: 560, alignSelf: 'center' },
-
-  header: {
-    backgroundColor: authColors.navy,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    paddingHorizontal: 20,
-    paddingBottom: 72,
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
   },
-  backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+  contentContainer: {
+    paddingHorizontal: theme.spacing.lg,
+    maxWidth: theme.layout.maxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  infoCard: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    marginTop: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: theme.spacing.md,
+  },
+  infoTitleSection: {
+    flex: 1,
+    marginRight: theme.spacing.md,
+  },
+  courseName: {
+    fontSize: theme.fontSize.lg,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  courseCode: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.textMuted,
+  },
+  infoDetails: {
+    gap: theme.spacing.sm,
+  },
+  infoRow: {
+    flexDirection: 'row',
+  },
+  infoLabel: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+    width: 80,
+  },
+  infoValue: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.text,
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  actionSection: {
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+  },
+  button: {
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 22,
-  },
-  title: { color: authColors.white, fontSize: 26, fontWeight: '800' },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  metaText: { color: '#B6C2DB', fontSize: 12 },
-  metaDot: { color: '#B6C2DB', fontSize: 12 },
-
-  body: { paddingHorizontal: 20, marginTop: -48 },
-
-  statusCard: {
-    backgroundColor: authColors.white,
-    borderRadius: 22,
-    padding: 16,
-    gap: 16,
-    shadowColor: '#1B2A4E',
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
-  },
-  statusTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  statusChip: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
-  statusChipText: { fontSize: 12, fontWeight: '700' },
-  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  timeText: { color: authColors.muted, fontSize: 12 },
-  peopleBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: '#EEF3FB',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  liveDot: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#22C55E',
   },
   actionButton: {
-    minHeight: 50,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    maxWidth: theme.layout.maxButtonWidth,
+    width: '100%',
+    alignSelf: 'center',
   },
-  actionText: { color: authColors.white, fontSize: 16, fontWeight: '800' },
-  endedBox: {
-    minHeight: 50,
-    borderRadius: 14,
-    backgroundColor: '#F1F4F9',
-    alignItems: 'center',
-    justifyContent: 'center',
+  buttonText: {
+    fontSize: theme.fontSize.md,
+    fontWeight: '600',
+    color: theme.colors.white,
   },
-  endedText: { color: authColors.muted, fontWeight: '700' },
-
-  sectionRow: {
-    flexDirection: 'row',
+  endedCard: {
+    backgroundColor: theme.colors.grayLight,
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: theme.spacing.md,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 26,
+    maxWidth: theme.layout.maxButtonWidth,
+    width: '100%',
+    alignSelf: 'center',
   },
-  sectionTitle: { color: authColors.ink, fontSize: 17, fontWeight: '800' },
-  countPill: {
-    flexDirection: 'row',
-    backgroundColor: authColors.white,
-    borderRadius: 999,
+  endedText: {
+    fontSize: theme.fontSize.md,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
+  },
+  attendanceSection: {
+    marginBottom: theme.spacing.md,
+  },
+  attendanceHeader: {
+    marginBottom: theme.spacing.md,
+  },
+  sectionTitle: {
+    fontSize: theme.fontSize.lg,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  attendanceCount: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.textMuted,
+  },
+  searchInput: {
+    backgroundColor: theme.colors.card,
     borderWidth: 1,
-    borderColor: authColors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
   },
-  countStrong: { color: authColors.ink, fontWeight: '800', fontSize: 13 },
-  countLight: { color: authColors.muted, fontSize: 13 },
-  track: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#E3E9F3',
-    marginTop: 12,
-    overflow: 'hidden',
+  centerButton: {
+    paddingHorizontal: theme.spacing.lg,
+    maxWidth: theme.layout.maxButtonWidth,
+    width: '100%',
+    alignSelf: 'center',
   },
-  fill: { height: 6, borderRadius: 3, backgroundColor: '#2F7BF5' },
-
-  chips: { gap: 8, paddingVertical: 14 },
-  chip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: authColors.border,
-    backgroundColor: authColors.white,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  chipActive: { backgroundColor: authColors.navy, borderColor: authColors.navy },
-  chipText: { color: authColors.ink, fontSize: 12, fontWeight: '600' },
-  chipTextActive: { color: authColors.white },
-
-  listCard: {
-    backgroundColor: authColors.white,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    shadowColor: '#1B2A4E',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
-  rowDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: authColors.border,
-  },
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontWeight: '800', fontSize: 12 },
-  rowName: { color: authColors.ink, fontWeight: '700', fontSize: 13 },
-  rowNim: { color: authColors.muted, fontSize: 11, marginTop: 1 },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  badgeText: { fontSize: 11, fontWeight: '700' },
-  emptyText: {
-    color: authColors.muted,
-    textAlign: 'center',
-    paddingVertical: 22,
-    fontSize: 13,
-  },
-
-  seeAll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 16,
-  },
-  seeAllText: { color: authColors.ink, fontSize: 12, fontWeight: '700' },
 });

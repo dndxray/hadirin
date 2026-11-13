@@ -5,6 +5,7 @@ import {
   Stack,
 } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { useSyncExternalStore } from 'react';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-native';
 
@@ -16,6 +17,7 @@ import { AuthProvider, useAuth } from '@/context/auth-context';
 import { AsistenProvider } from '../../features/asisten/AsistenContext';
 
 SplashScreen.preventAutoHideAsync();
+const subscribeHydration = () => () => {};
 
 function RootNavigator() {
   const { profile, loading } = useAuth();
@@ -57,11 +59,7 @@ function RootNavigator() {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(subscribeHydration, () => true, () => false);
 
   if (!mounted) {
     return null;

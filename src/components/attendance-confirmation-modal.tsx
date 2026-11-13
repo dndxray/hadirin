@@ -9,6 +9,7 @@ type AttendanceConfirmationModalProps = {
   phase: AttendanceModalPhase;
   session: PracticeSession;
   attendanceTime?: string;
+  busy?: boolean;
   onClose: () => void;
   onConfirm: () => void;
   onViewHistory: () => void;
@@ -18,6 +19,7 @@ export function AttendanceConfirmationModal({
   phase,
   session,
   attendanceTime,
+  busy = false,
   onClose,
   onConfirm,
   onViewHistory,
@@ -42,7 +44,7 @@ export function AttendanceConfirmationModal({
   const message = isConfirm
     ? 'Pastikan identitas dan sesi di bawah sudah benar sebelum melanjutkan.'
     : isSuccess
-      ? `Kehadiranmu tercatat pada ${attendanceTime ?? 'waktu sekarang'}.`
+      ? attendanceTime ? `Kehadiranmu tercatat pada ${attendanceTime}.` : 'Kehadiran tersimpan. Waktu server akan muncul di riwayat.'
       : phase === 'duplicate'
         ? 'Kamu hanya dapat melakukan presensi satu kali untuk sesi ini.'
         : 'Presensi hanya dapat dilakukan ketika asisten membuka sesi.';
@@ -124,12 +126,13 @@ export function AttendanceConfirmationModal({
               </Pressable>
               <Pressable
                 accessibilityRole="button"
+                disabled={busy}
                 onPress={onConfirm}
                 style={({ pressed }) => [
                   styles.primaryButton,
                   { backgroundColor: pressed ? colors.primaryPressed : colors.primary },
                 ]}>
-                <Text style={[styles.primaryLabel, { color: colors.background }]}>Catat kehadiran</Text>
+                <Text style={[styles.primaryLabel, { color: colors.background }]}>{busy ? 'Menyimpan…' : 'Catat kehadiran'}</Text>
               </Pressable>
             </View>
           ) : (

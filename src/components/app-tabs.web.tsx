@@ -7,11 +7,18 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { Pressable, type PressableProps, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  type PressableProps,
+  useWindowDimensions,
+  View,
+  Text,
+  StyleSheet,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import { authColors } from '@/components/auth-ui';
-import { useRole } from '@/hooks/use-role';
+import { useRole, type Role } from '@/hooks/use-role';
+import { ThemedText } from './themed-text';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -23,7 +30,7 @@ export default function AppTabs() {
       <TabSlot style={{ flex: 1, width: '100%' }} />
 
       <TabList asChild>
-        <CustomTabList>
+        <CustomTabList userRole={role}>
           {role === 'asisten' ? (
             <>
               <TabTrigger name="jadwal" href="/jadwal" asChild>
@@ -40,6 +47,9 @@ export default function AppTabs() {
               </TabTrigger>
               <TabTrigger name="explore" href="/explore" asChild>
                 <TabButton icon="clipboard" label="Riwayat" />
+              </TabTrigger>
+              <TabTrigger name="izin" href="/izin" asChild>
+                <TabButton icon="document-text" label="Izin" />
               </TabTrigger>
               <TabTrigger name="jadwal" href="/jadwal" asChild>
                 <TabButton icon="calendar" label="Jadwal" />
@@ -82,13 +92,34 @@ export function TabButton({
   );
 }
 
-export function CustomTabList(props: TabListProps) {
+export function CustomTabList({
+  userRole,
+  ...props
+}: TabListProps & { userRole: Role }) {
   const insets = useSafeAreaInsets();
+  const compact = useWindowDimensions().width < 600;
 
   return (
     <View {...props} style={styles.wrap}>
-      <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        {!compact ? (
+          <ThemedText type="smallBold" style={styles.brandText}>
+            Hadirin
+          </ThemedText>
+        ) : null}
+
         {props.children}
+
+        {!compact ? <View style={styles.separator} /> : null}
+
+        {!compact ? (
+          <View style={styles.roleBadge}>
+            <View style={styles.roleDot} />
+            <ThemedText type="smallBold" style={styles.roleBadgeText}>
+              {userRole === 'asisten' ? 'Asisten' : 'Praktikan'}
+            </ThemedText>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -104,6 +135,7 @@ const styles = StyleSheet.create({
   },
   bar: {
     flexDirection: 'row',
+    alignItems: 'center',
     width: '100%',
     maxWidth: 560,
     backgroundColor: authColors.white,
@@ -118,6 +150,28 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -4 },
     elevation: 10,
   },
+  brandText: { marginRight: 8, alignSelf: 'center' },
+  separator: {
+    width: 1,
+    height: 24,
+    backgroundColor: authColors.muted,
+    opacity: 0.3,
+    alignSelf: 'center',
+    marginHorizontal: 8,
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'center',
+  },
+  roleDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: authColors.navy,
+  },
+  roleBadgeText: { color: authColors.navy },
   tabButton: { flex: 1, alignItems: 'center' },
   pill: {
     minWidth: 68,
