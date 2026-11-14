@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import ts from 'typescript';
 import * as firestore from 'firebase/firestore';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
 
 let env;
 const session = { courseName: 'PPK', className: 'A', dateLabel: '12 November 2026', timeRange: '13.00–15.00 WIB', room: 'Lab', assistantName: 'Fadhil' };
@@ -128,4 +128,85 @@ test('keputusan dan klasifikasi dari asisten tersinkron ke listener praktikan', 
     await assertSucceeds(updateDoc(assistantRef, { status: 'approved', decidedBy: 'assistant', decidedAt: serverTimestamp(), decisionNote: 'Silakan beristirahat.' }));
     assert.equal((await changed).ai.category, 'sakit');
   } finally { unsubscribe?.(); }
+});
+test('asisten dapat membuka dan menutup sesi; praktikan dilarang mengubah status (SRS-03 & SRS-15)', async () => {
+  const sessionUpcoming = doc(db('assistant'), 'sessions', 'upcoming');
+  await assertSucceeds(updateDoc(sessionUpcoming, { status: 'open' }));
+  const dataOpened = (await getDoc(sessionUpcoming)).data();
+  assert.equal(dataOpened.status, 'open');
+
+  await assertSucceeds(updateDoc(sessionUpcoming, { status: 'closed' }));
+  const dataClosed = (await getDoc(sessionUpcoming)).data();
+  assert.equal(dataClosed.status, 'closed');
+
+  // Praktikan mencoba mengubah status sesi ditolak
+  await assertFails(updateDoc(doc(db('caesar'), 'sessions', 'open'), { status: 'closed' }));
+});
+test('asisten dapat memantau daftar kehadiran per sesi (SRS-04)', async () => {
+  await setDoc(doc(db(), 'attendance', 'open_caesar'), attendance('caesar', 'open'));
+  await setDoc(doc(db('other'), 'attendance', 'open_other'), attendance('other', 'open'));
+
+  const assistantAttendance = await assertSucceeds(
+    getDocs(query(collection(db('assistant'), 'attendance'), where('sessionId', '==', 'open')))
+  );
+  assert.equal(assistantAttendance.size, 2);
+});
+test('asisten dapat menambah, mengubah, dan menghapus sesi (SRS-13 & SRS-15)', async () => {
+  const assistantStore = db('assistant');
+  const newSessionRef = doc(assistantStore, 'sessions', 'session_new');
+  
+  // Create
+  await assertSucceeds(setDoc(newSessionRef, {
+    courseName: 'Basis Data Lanjut',
+    className: 'TI-3B',
+    dateLabel: 'Jumat, 20 November 2026',
+    timeRange: '08.00–10.00 WIB',
+    room: 'Lab Basis Data',
+    assistantName: 'Fadhil',
+    status: 'upcoming',
+    participantIds: ['caesar'],
+  }));
+
+  // Update
+  await assertSucceeds(updateDoc(newSessionRef, { room: 'Lab Multimedia' }));
+  const updated = (await getDoc(newSessionRef)).data();
+  assert.equal(updated.room, 'Lab Multimedia');
+
+  // Delete
+  await assertSucceeds(deleteDoc(newSessionRef));
+  assert.equal((await getDoc(newSessionRef)).exists(), false);
+
+  // Praktikan dilarang create / delete sesi
+  await assertFails(setDoc(doc(db('caesar'), 'sessions', 'illegal_session'), {
+    ...session,
+    status: 'upcoming',
+    participantIds: ['caesar'],
+  }));
+  await assertFails(deleteDoc(doc(db('caesar'), 'sessions', 'open')));
+});
+test('SRS-15: Penegakan ketat Security Rules sesi - praktikan hanya read-only jika peserta, dilarang mutasi data/status', async () => {
+  const caesarStore = db('caesar');
+  const outsiderStore = db('outsider');
+  const unauthStore = env.unauthenticatedContext().firestore();
+
+  // 1. Praktikan peserta boleh membaca sesi
+  await assertSucceeds(getDoc(doc(caesarStore, 'sessions', 'open')));
+
+  // 2. Praktikan BUKAN peserta dilarang membaca sesi
+  await assertFails(getDoc(doc(outsiderStore, 'sessions', 'open')));
+
+  // 3. User tanpa login dilarang membaca sesi
+  await assertFails(getDoc(doc(unauthStore, 'sessions', 'open')));
+
+  // 4. Praktikan dilarang mengubah status (buka/tutup sesi)
+  await assertFails(updateDoc(doc(caesarStore, 'sessions', 'upcoming'), { status: 'open' }));
+  await assertFails(updateDoc(doc(caesarStore, 'sessions', 'open'), { status: 'closed' }));
+
+  // 5. Praktikan dilarang mengubah data/jadwal sesi (room, participantIds, dll)
+  await assertFails(updateDoc(doc(caesarStore, 'sessions', 'open'), { room: 'Ruang Diretas' }));
+  await assertFails(updateDoc(doc(caesarStore, 'sessions', 'open'), { participantIds: ['caesar', 'outsider'] }));
+
+  // 6. Asisten tetap memiliki hak penuh
+  await assertSucceeds(getDoc(doc(db('assistant'), 'sessions', 'open')));
+  await assertSucceeds(updateDoc(doc(db('assistant'), 'sessions', 'open'), { room: 'Lab Resmi' }));
 });

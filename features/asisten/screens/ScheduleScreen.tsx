@@ -1,0 +1,209 @@
+import React, { useState } from 'react';
+import {
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+  Pressable,
+  ActivityIndicator,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAsisten } from '../AsistenContext';
+import { SessionCard } from '../components/SessionCard';
+import { EmptyState } from '../components/EmptyState';
+import { SessionFormModal } from '../components/SessionFormModal';
+import { theme } from '../theme';
+import type { SessionInput } from '../../../src/services/assistant-service';
+
+export function ScheduleScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { assistant, sessions, createSession, loading, error } = useAsisten();
+
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const handleCreateSession = async (input: SessionInput) => {
+    await createSession(input);
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>Memuat jadwal...</Text>
+      </View>
+    );
+  }
+
+  const errorBanner = error ? (
+    <View style={styles.errorBanner}>
+      <Text style={styles.errorText}>⚠️ {error}</Text>
+      <Text style={styles.errorHint}>Coba periksa koneksi internet Anda.</Text>
+    </View>
+  ) : null;
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        data={sessions}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={
+          <View>
+            <View style={styles.header}>
+              <View style={styles.headerTextSection}>
+                <Text style={styles.title}>Jadwal Praktikum</Text>
+                <Text style={styles.subtitle}>Asisten: {assistant.name}</Text>
+              </View>
+
+              <View style={styles.headerActions}>
+                <Pressable
+                  style={styles.permissionsButton}
+                  onPress={() => router.push('/(asisten)/permissions')}
+                >
+                  <Text style={styles.permissionsButtonText}>📄 Izin</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.addButton}
+                  onPress={() => setShowAddModal(true)}
+                >
+                  <Text style={styles.addButtonText}>+ Sesi</Text>
+                </Pressable>
+              </View>
+            </View>
+            {errorBanner}
+          </View>
+        }
+        renderItem={({ item }) => (
+          <SessionCard
+            session={item}
+            onPress={() =>
+              router.push({
+                pathname: '/(asisten)/sessions/[sessionId]',
+                params: { sessionId: item.id },
+              })
+            }
+          />
+        )}
+        ListEmptyComponent={
+          <EmptyState
+            icon="📅"
+            title="Belum ada jadwal praktikum"
+            subtitle="Tekan tombol '+ Sesi' untuk membuat jadwal baru."
+          />
+        }
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingBottom: insets.bottom + theme.spacing.lg },
+        ]}
+      />
+
+      <SessionFormModal
+        visible={showAddModal}
+        mode="create"
+        onClose={() => setShowAddModal(false)}
+        onSubmit={handleCreateSession}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  loadingText: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.textMuted,
+    marginTop: theme.spacing.sm,
+  },
+  errorBanner: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#F87171',
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  errorText: {
+    color: '#991B1B',
+    fontSize: theme.fontSize.sm,
+    fontWeight: '600',
+  },
+  errorHint: {
+    color: '#B91C1C',
+    fontSize: theme.fontSize.xs,
+    marginTop: 2,
+  },
+  contentContainer: {
+    paddingHorizontal: theme.spacing.lg,
+    maxWidth: theme.layout.maxContentWidth,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
+  },
+  headerTextSection: {
+    flex: 1,
+  },
+  title: {
+    fontSize: theme.fontSize.xxl,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  subtitle: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.textMuted,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  permissionsButton: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: theme.borderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  permissionsButtonText: {
+    color: theme.colors.text,
+    fontSize: theme.fontSize.xs,
+    fontWeight: '700',
+  },
+  addButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: theme.borderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: theme.fontSize.xs,
+    fontWeight: '700',
+  },
+});

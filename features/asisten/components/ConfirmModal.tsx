@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -40,11 +39,15 @@ export function ConfirmModal({
           <View style={styles.grabber} />
 
           <View style={[styles.icon, { backgroundColor: isRed ? '#FEE2E2' : '#E6F6EC' }]}>
-            <Ionicons
-              name={isRed ? 'close' : 'checkmark'}
-              size={28}
-              color={isRed ? authColors.danger : authColors.green}
-            />
+            <Text
+              style={{
+                fontSize: 24,
+                fontWeight: '700',
+                color: isRed ? authColors.danger : authColors.green,
+              }}
+            >
+              {isRed ? '✕' : '✓'}
+            </Text>
           </View>
 
           <Text style={styles.title}>{title}</Text>
@@ -98,20 +101,24 @@ const styles = StyleSheet.create({
   title: { color: authColors.ink, fontSize: 18, fontWeight: '800', marginTop: 6 },
   message: {
     color: authColors.muted,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 14,
     textAlign: 'center',
-    marginBottom: 10,
+    lineHeight: 20,
+    marginBottom: 8,
   },
   confirm: {
-    alignSelf: 'stretch',
-    backgroundColor: authColors.navy,
+    width: '100%',
+    backgroundColor: '#2563EB',
+    paddingVertical: 14,
     borderRadius: 14,
-    minHeight: 52,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  confirmText: { color: authColors.white, fontSize: 16, fontWeight: '800' },
-  cancel: { paddingVertical: 10 },
-  cancelText: { color: authColors.muted, fontWeight: '700' },
+  confirmText: { color: authColors.white, fontWeight: '700', fontSize: 15 },
+  cancel: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  cancelText: { color: authColors.muted, fontWeight: '600', fontSize: 14 },
 });
