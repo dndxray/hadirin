@@ -27,6 +27,12 @@ service cloud.firestore {
       allow create, update, delete: if isAsisten();
     }
 
+    // Mata kuliah
+    match /courses/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAsisten();
+    }
+
     function isPraktikan() {
       return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'praktikan';
     }

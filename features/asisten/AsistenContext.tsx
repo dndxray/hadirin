@@ -53,6 +53,10 @@ function asistenReducer(state: State, action: Action): State {
             ? {
                 ...s,
                 ...action.input,
+                date:
+                  typeof action.input.date === 'string'
+                    ? action.input.date
+                    : s.date,
                 kelas: action.input.className ?? s.kelas,
                 className: action.input.className ?? s.className,
               }
@@ -130,16 +134,10 @@ export function AsistenProvider({ children }: { children: ReactNode }) {
   // Only assistants may list sessions; skip the listener for practitioners so
   // Firestore rules do not reject the query on every app start.
   useEffect(() => {
-    if (authLoading) return;
-
-    if (!isAsisten) {
-      dispatch({ type: 'SET_SESSIONS', sessions: [] });
-      setLoading(false);
-      setError(null);
+    if (authLoading || !isAsisten) {
       return;
     }
 
-    setLoading(true);
     const unsubscribe = subscribeAssistantSessions(
       (firestoreSessions) => {
         dispatch({ type: 'SET_SESSIONS', sessions: firestoreSessions });
@@ -186,9 +184,9 @@ export function AsistenProvider({ children }: { children: ReactNode }) {
       courseCode: input.courseCode || '',
       kelas: input.className,
       className: input.className,
-      date: input.dateLabel ?? '',
-      startTime: '',
-      endTime: '',
+      date: typeof input.date === 'string' ? input.date : (input.dateLabel ?? ''),
+      startTime: input.startTime || '',
+      endTime: input.endTime || '',
       dateLabel: input.dateLabel,
       timeRange: input.timeRange,
       room: input.room,
@@ -232,7 +230,7 @@ export function AsistenProvider({ children }: { children: ReactNode }) {
 
   const value = {
     assistant,
-    sessions: sortedSessions,
+    sessions: isAsisten ? sortedSessions : [],
     getSession,
     getAttendances,
     createSession,
@@ -240,8 +238,8 @@ export function AsistenProvider({ children }: { children: ReactNode }) {
     deleteSession,
     openSession,
     closeSession,
-    loading,
-    error,
+    loading: isAsisten ? (authLoading || loading) : false,
+    error: isAsisten ? error : null,
   };
 
   return (

@@ -210,3 +210,19 @@ test('SRS-15: Penegakan ketat Security Rules sesi - praktikan hanya read-only ji
   await assertSucceeds(getDoc(doc(db('assistant'), 'sessions', 'open')));
   await assertSucceeds(updateDoc(doc(db('assistant'), 'sessions', 'open'), { room: 'Lab Resmi' }));
 });
+
+test('SRS-15: hak akses koleksi courses — asisten boleh tulis, praktikan hanya baca', async () => {
+  const assistantDb = db('assistant');
+  const caesarDb = db('caesar');
+  const courseRef = doc(assistantDb, 'courses', 'c-mobile');
+
+  // Asisten dapat membuat course
+  await assertSucceeds(setDoc(courseRef, { name: 'Pemrograman Mobile', code: 'IF123' }));
+
+  // Praktikan dapat membaca course
+  await assertSucceeds(getDoc(doc(caesarDb, 'courses', 'c-mobile')));
+
+  // Praktikan dilarang membuat atau mengubah course
+  await assertFails(setDoc(doc(caesarDb, 'courses', 'c-hacked'), { name: 'Hacked', code: 'BAD' }));
+  await assertFails(updateDoc(doc(caesarDb, 'courses', 'c-mobile'), { name: 'Diretas' }));
+});

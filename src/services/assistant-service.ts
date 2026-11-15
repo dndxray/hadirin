@@ -1,4 +1,5 @@
 import {
+  Timestamp,
   addDoc,
   collection,
   deleteDoc,
@@ -33,6 +34,10 @@ export type SessionInput = {
   room: string;
   description?: string;
   participantIds?: string[];
+  date?: Date | Timestamp | string;
+  dateTimestamp?: Timestamp;
+  startTime?: string;
+  endTime?: string;
 };
 
 // In-memory cache for user profile resolution (UID -> { name, nim })
@@ -146,22 +151,49 @@ export async function createSession(
     throw new Error('Autentikasi Firebase diperlukan untuk membuat sesi.');
   }
 
-  const docRef = await addDoc(collection(db, 'sessions'), {
-    courseName: input.courseName.trim(),
-    courseCode: input.courseCode?.trim() || '',
-    className: input.className.trim(),
-    dateLabel: input.dateLabel.trim(),
-    timeRange: input.timeRange.trim(),
-    room: input.room.trim(),
-    description: input.description?.trim() || '',
-    assistantName: assistantName || 'Asisten',
-    assistantId: user.uid,
-    status: 'upcoming',
-    participantIds: input.participantIds || [],
-    createdAt: serverTimestamp(),
-  });
+  // Parse or construct Timestamp for date (PRD R1 & R4)
+  let dateTimestamp: Timestamp;
+  if (input.dateTimestamp instanceof Timestamp) {
+    dateTimestamp = input.dateTimestamp;
+  } else if (input.date instanceof Timestamp) {
+    dateTimestamp = input.date;
+  } else if (input.date instanceof Date) {
+    dateTimestamp = Timestamp.fromDate(input.date);
+  } else if (typeof input.date === 'string' && input.date.trim() && !isNaN(Date.parse(input.date))) {
+    dateTimestamp = Timestamp.fromDate(new Date(input.date));
+  } else {
+    dateTimestamp = Timestamp.fromDate(new Date());
+  }
 
-  return docRef.id;
+  try {
+    const docRef = await addDoc(collection(db, 'sessions'), {
+      courseName: input.courseName.trim(),
+      courseCode: input.courseCode?.trim() || '',
+      className: input.className.trim(),
+      dateLabel: input.dateLabel.trim(),
+      timeRange: input.timeRange.trim(),
+      room: input.room.trim(),
+      description: input.description?.trim() || '',
+      assistantName: assistantName || 'Asisten',
+      assistantId: user.uid,
+      status: 'upcoming',
+      participantIds: input.participantIds || [],
+      date: dateTimestamp,
+      dateTimestamp: dateTimestamp,
+      startTime: input.startTime?.trim() || '',
+      endTime: input.endTime?.trim() || '',
+      createdAt: serverTimestamp(),
+    });
+
+    return docRef.id;
+  } catch (err: any) {
+    if (err?.code === 'permission-denied') {
+      throw new Error(
+        'Izin ditolak (permission-denied): Hanya asisten yang dapat menambah sesi di Firestore. Pastikan akun Anda memiliki role "asisten".'
+      );
+    }
+    throw new Error(err?.message || 'Gagal menyimpan sesi ke Firestore.');
+  }
 }
 
 export async function updateSession(
@@ -192,8 +224,27 @@ export async function updateSession(
   if (input.room !== undefined) updatePayload.room = input.room.trim();
   if (input.description !== undefined) updatePayload.description = input.description.trim();
   if (input.participantIds !== undefined) updatePayload.participantIds = input.participantIds;
+  if (input.startTime !== undefined) updatePayload.startTime = input.startTime.trim();
+  if (input.endTime !== undefined) updatePayload.endTime = input.endTime.trim();
+  if (input.date !== undefined || input.dateTimestamp !== undefined) {
+    let dateTs: Timestamp;
+    if (input.dateTimestamp instanceof Timestamp) dateTs = input.dateTimestamp;
+    else if (input.date instanceof Timestamp) dateTs = input.date;
+    else if (input.date instanceof Date) dateTs = Timestamp.fromDate(input.date);
+    else if (typeof input.date === 'string' && !isNaN(Date.parse(input.date))) dateTs = Timestamp.fromDate(new Date(input.date));
+    else dateTs = Timestamp.fromDate(new Date());
+    updatePayload.date = dateTs;
+    updatePayload.dateTimestamp = dateTs;
+  }
 
-  await updateDoc(sessionRef, updatePayload);
+  try {
+    await updateDoc(sessionRef, updatePayload);
+  } catch (err: any) {
+    if (err?.code === 'permission-denied') {
+      throw new Error('Izin ditolak (permission-denied): Hanya asisten yang dapat mengubah sesi.');
+    }
+    throw new Error(err?.message || 'Gagal memperbarui sesi.');
+  }
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
@@ -203,7 +254,14 @@ export async function deleteSession(sessionId: string): Promise<void> {
   }
 
   const sessionRef = doc(db, 'sessions', sessionId);
-  await deleteDoc(sessionRef);
+  try {
+    await deleteDoc(sessionRef);
+  } catch (err: any) {
+    if (err?.code === 'permission-denied') {
+      throw new Error('Izin ditolak (permission-denied): Hanya asisten yang dapat menghapus sesi.');
+    }
+    throw new Error(err?.message || 'Gagal menghapus sesi.');
+  }
 }
 
 export async function setSessionStatus(
@@ -260,14 +318,23 @@ export function subscribeAssistantSessions(
     (snapshot: any) => {
       const items: Session[] = snapshot.docs.map((d: any) => {
         const raw = d.data();
+        let dateStr = '';
+        if (raw.date?.toDate) {
+          dateStr = raw.date.toDate().toISOString().split('T')[0];
+        } else if (typeof raw.date === 'string') {
+          dateStr = raw.date;
+        } else if (raw.dateLabel) {
+          dateStr = raw.dateLabel;
+        }
+
         return {
           id: d.id,
           courseName: raw.courseName ?? '',
           courseCode: raw.courseCode ?? '',
           kelas: raw.className ?? raw.kelas ?? '',
           className: raw.className ?? raw.kelas ?? '',
-          date: raw.date ?? '',
-          dateLabel: raw.dateLabel ?? raw.date ?? '',
+          date: dateStr,
+          dateLabel: raw.dateLabel ?? dateStr,
           startTime: raw.startTime ?? '',
           endTime: raw.endTime ?? '',
           timeRange: raw.timeRange ?? `${raw.startTime ?? ''} - ${raw.endTime ?? ''}`,

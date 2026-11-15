@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '@/context/auth-context';
 import { useAsisten } from '../AsistenContext';
 import { SessionCard } from '../components/SessionCard';
 import { EmptyState } from '../components/EmptyState';
@@ -19,6 +20,8 @@ import type { SessionInput } from '../../../src/services/assistant-service';
 export function ScheduleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { profile, loading: authLoading } = useAuth();
+  const isAsisten = profile?.role === 'asisten';
   const { assistant, sessions, createSession, loading, error } = useAsisten();
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -27,7 +30,7 @@ export function ScheduleScreen() {
     await createSession(input);
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -53,24 +56,31 @@ export function ScheduleScreen() {
             <View style={styles.header}>
               <View style={styles.headerTextSection}>
                 <Text style={styles.title}>Jadwal Praktikum</Text>
-                <Text style={styles.subtitle}>Asisten: {assistant.name}</Text>
+                <Text style={styles.subtitle}>
+                  {isAsisten
+                    ? `Asisten: ${profile?.name || assistant.name}`
+                    : 'Daftar sesi praktikum terdaftar'}
+                </Text>
               </View>
 
-              <View style={styles.headerActions}>
-                <Pressable
-                  style={styles.permissionsButton}
-                  onPress={() => router.push('/(asisten)/permissions')}
-                >
-                  <Text style={styles.permissionsButtonText}>📄 Izin</Text>
-                </Pressable>
+              {/* PRD R2: Sembunyikan tombol tulis dan menu asisten untuk praktikan */}
+              {isAsisten && (
+                <View style={styles.headerActions}>
+                  <Pressable
+                    style={styles.permissionsButton}
+                    onPress={() => router.push('/(asisten)/permissions')}
+                  >
+                    <Text style={styles.permissionsButtonText}>📄 Izin</Text>
+                  </Pressable>
 
-                <Pressable
-                  style={styles.addButton}
-                  onPress={() => setShowAddModal(true)}
-                >
-                  <Text style={styles.addButtonText}>+ Sesi</Text>
-                </Pressable>
-              </View>
+                  <Pressable
+                    style={styles.addButton}
+                    onPress={() => setShowAddModal(true)}
+                  >
+                    <Text style={styles.addButtonText}>+ Sesi</Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
             {errorBanner}
           </View>
@@ -78,19 +88,30 @@ export function ScheduleScreen() {
         renderItem={({ item }) => (
           <SessionCard
             session={item}
-            onPress={() =>
-              router.push({
-                pathname: '/(asisten)/sessions/[sessionId]',
-                params: { sessionId: item.id },
-              })
-            }
+            onPress={() => {
+              if (isAsisten) {
+                router.push({
+                  pathname: '/(asisten)/sessions/[sessionId]',
+                  params: { sessionId: item.id },
+                });
+              } else {
+                router.push({
+                  pathname: '/detail-sesi',
+                  params: { id: item.id },
+                });
+              }
+            }}
           />
         )}
         ListEmptyComponent={
           <EmptyState
             icon="📅"
             title="Belum ada jadwal praktikum"
-            subtitle="Tekan tombol '+ Sesi' untuk membuat jadwal baru."
+            subtitle={
+              isAsisten
+                ? "Tekan tombol '+ Sesi' untuk membuat jadwal baru."
+                : 'Sesi praktikum akan muncul saat dibuka oleh asisten.'
+            }
           />
         }
         contentContainerStyle={[
@@ -99,12 +120,14 @@ export function ScheduleScreen() {
         ]}
       />
 
-      <SessionFormModal
-        visible={showAddModal}
-        mode="create"
-        onClose={() => setShowAddModal(false)}
-        onSubmit={handleCreateSession}
-      />
+      {isAsisten && (
+        <SessionFormModal
+          visible={showAddModal}
+          mode="create"
+          onClose={() => setShowAddModal(false)}
+          onSubmit={handleCreateSession}
+        />
+      )}
     </View>
   );
 }
