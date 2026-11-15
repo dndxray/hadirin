@@ -41,6 +41,7 @@ export default function PermissionScreen() {
   }
 
   return <PractitionerScreen title="Pengajuan izin">
+    <Action label="Kembali ke sesi" onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/home'); }} />
     <Text style={[ui.body, { color: colors.inkMuted }]}>Jelaskan ketidakhadiranmu. Keputusan diberikan oleh asisten; hasil AI hanya informasi pendukung.</Text>
     <DataState {...sessionState} retry={retry} />
     <DataState {...attendanceState} retry={retry} />

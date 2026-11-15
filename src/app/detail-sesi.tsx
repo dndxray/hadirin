@@ -14,9 +14,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getSessionStatus } from '@/utils/session-status'; // IMPORT UTILITY KITA
+import { useAuth } from '@/context/auth-context';
 
 export default function DetailSesiScreen() {
   const insets = useSafeAreaInsets();
+  const { profile } = useAuth();
   const params = useLocalSearchParams<{ id: string }>();
   const sessionId = Array.isArray(params.id) ? params.id[0] : params.id;
 
@@ -190,6 +192,13 @@ export default function DetailSesiScreen() {
                 {isOpen ? 'Isi Presensi' : isUpcoming ? 'Belum Dibuka' : 'Sesi Ditutup'}
               </Text>
             </Pressable>
+            {profile?.role === 'praktikan' ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Ajukan Izin"
+                onPress={() => router.push('/izin')}
+                style={[styles.button, { marginTop: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#1B2A4E' }]}>
+                <Text style={[styles.buttonText, { color: '#1B2A4E' }]}>Ajukan Izin</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </ScrollView>
