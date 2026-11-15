@@ -25,7 +25,11 @@ function useOwnCollection<T>(name: string, uid: string | undefined, field: strin
         } as T;
       });
       setState({ uid, data, loading: false, error: null, fromCache: snapshot.metadata.fromCache });
-    }, (error) => setState({ uid, data: [], loading: false, error: firebaseErrorMessage(error), fromCache: false }));
+    }, (error) => {
+      const resource = name === 'sessions' ? 'sesi' : name === 'attendance' ? 'presensi' : 'izin';
+      if (__DEV__) console.warn('[Firestore access]', { collection: name, code: error.code, projectId: db.app.options.projectId, uid });
+      setState({ uid, data: [], loading: false, error: `Gagal memuat ${resource}. ${firebaseErrorMessage(error)} (${error.code})`, fromCache: false });
+    });
   }, [name, uid, field, array]);
   return state.uid === uid && uid ? state : initial<T>();
 }

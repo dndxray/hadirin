@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -13,12 +13,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getSessionStatus } from '@/utils/session-status'; // IMPORT UTILITY KITA
 import { useAuth } from '@/context/auth-context';
+import { useAttendance } from '@/context/attendance-context';
+import { firebaseErrorMessage } from '@/utils/firebase-error';
 
 export default function DetailSesiScreen() {
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
+  const { sessions, records, permissions, sessionState, attendanceState, permissionState, checkIn, retry } = useAttendance();
   const params = useLocalSearchParams<{ id: string }>();
   const sessionId = Array.isArray(params.id) ? params.id[0] : params.id;
 
@@ -27,6 +29,21 @@ export default function DetailSesiScreen() {
   const [showModal, setShowModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState('');
+  const [confirmationSessionId, setConfirmationSessionId] = useState('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const saving = useRef(false);
+  const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+  const normalizeClass = (value: string) => normalize(value).replace(/^kelas\s+/, '');
+  const matching = sessions.filter((session) => kelas && normalize(session.courseName) === normalize(kelas.course || '')
+    && normalizeClass(session.className) === normalizeClass(kelas.name || ''));
+  const selectedSession = matching.find((session) => session.id === selectedSessionId)
+    ?? (!selectedSessionId && matching.length === 1 ? matching[0] : undefined);
+  const recorded = !!selectedSession && records.some((record) => record.sessionId === selectedSession.id);
+  const requested = !!selectedSession && permissions.some((permission) => permission.sessionId === selectedSession.id);
+  const dataError = sessionState.error || attendanceState.error || permissionState.error;
+  const ready = !sessionState.loading && !attendanceState.loading && !permissionState.loading && !dataError
+    && !sessionState.fromCache && !attendanceState.fromCache && !permissionState.fromCache;
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -47,18 +64,17 @@ export default function DetailSesiScreen() {
   }, [sessionId]);
 
   const handlePresensi = async () => {
+    if (saving.current || !selectedSession || selectedSession.id !== confirmationSessionId || !ready || recorded || requested || selectedSession.status !== 'open') return;
+    saving.current = true;
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await checkIn(selectedSession.id);
       setSuccess(true);
-      setTimeout(() => {
-        setShowModal(false);
-        setSuccess(false);
-        router.replace('/explore');
-      }, 2000);
     } catch (error) {
-      console.error(error);
+      setSubmitError(firebaseErrorMessage(error));
     } finally {
+      saving.current = false;
       setIsSubmitting(false);
     }
   };
@@ -82,15 +98,15 @@ export default function DetailSesiScreen() {
     );
   }
 
-  // CEK STATUS OTOMATIS DARI JAM GMT+7
-  const dynamicStatus = getSessionStatus(kelas);
+  const dynamicStatus = selectedSession?.status;
   const isOpen = dynamicStatus === 'open';
   const isUpcoming = dynamicStatus === 'upcoming';
 
-  let statusColor = '#94A3B8', statusBg = '#EEF1F6', statusTextColor = '#64748B', statusLabel = 'Sesi belum dibuka';
+  const selectedTimes = selectedSession?.timeRange.split(/\s*[-–—]\s*/);
+  let statusColor = '#94A3B8', statusBg = '#EEF1F6', statusTextColor = '#52627A', statusLabel = selectedSession ? 'Sesi belum dibuka' : 'Pilih sesi praktikum';
   if (isOpen) {
-    statusColor = '#22C55E'; statusBg = '#E6F6EC'; statusTextColor = '#15803D'; statusLabel = 'Sesi sedang dibuka';
-  } else if (!isUpcoming) {
+    statusColor = '#22C55E'; statusBg = '#E6F6EC'; statusTextColor = '#166534'; statusLabel = 'Sesi sedang dibuka';
+  } else if (dynamicStatus === 'closed') {
     statusColor = '#EF4444'; statusBg = '#FEE2E2'; statusTextColor = '#B91C1C'; statusLabel = 'Sesi telah ditutup';
   }
 
@@ -134,12 +150,26 @@ export default function DetailSesiScreen() {
             </View>
           </View>
 
+          {profile?.role === 'praktikan' ? <View style={styles.sessionSelection}>
+            {sessionState.loading ? <Text style={styles.selectionHint}>Memuat sesi…</Text> : null}
+            {dataError ? <><Text accessibilityRole="alert" style={styles.selectionError}>{dataError}</Text>
+              <Pressable accessibilityRole="button" onPress={retry} style={styles.sessionChoice}><Text style={styles.selectionHint}>Coba lagi</Text></Pressable></> : null}
+            {!sessionState.loading && !sessionState.error && !matching.length ? <Text style={styles.selectionHint}>Belum terdaftar pada sesi kelas ini. Minta asisten menambahkan NIM akunmu ke sesi.</Text> : null}
+            {matching.length > 1 ? <><Text style={styles.selectionHint}>Pilih sesi untuk presensi atau izin:</Text>
+              {matching.map((session) => <Pressable key={session.id} accessibilityRole="button"
+                accessibilityState={{ selected: selectedSession?.id === session.id }}
+                onPress={() => { setSelectedSessionId(session.id); setSubmitError(null); }}
+                style={[styles.sessionChoice, selectedSession?.id === session.id && { borderColor: '#1B2A4E' }]}>
+                <Text style={styles.selectionHint}>{session.dateLabel} · {session.timeRange}</Text>
+              </Pressable>)}</> : null}
+          </View> : null}
+
           <View style={styles.card}>
             <View style={styles.cardIconWrap}>
               <Ionicons name="calendar-outline" size={26} color="#1B2A4E" />
             </View>
             <Text style={styles.dateLabel}>
-              {kelas.dateLabel || 'Tanggal belum diatur'}
+              {selectedSession?.dateLabel || kelas.dateLabel || 'Tanggal belum diatur'}
             </Text>
             <Text style={styles.sessionTitle}>
               Sesi Praktikum {kelas.name ? kelas.name.replace('Kelas ', '') : 'B'}
@@ -148,7 +178,7 @@ export default function DetailSesiScreen() {
             <View style={styles.timeline}>
               <View style={styles.timeCol}>
                 <Text style={styles.timeLabel}>Mulai</Text>
-                <Text style={styles.timeValue}>{kelas.timeStart || '--:--'}</Text>
+                <Text style={styles.timeValue}>{selectedTimes?.[0] || kelas.timeStart || '--:--'}</Text>
               </View>
               <View style={styles.timeLine}>
                 <View style={styles.lineBar} />
@@ -157,7 +187,7 @@ export default function DetailSesiScreen() {
               </View>
               <View style={[styles.timeCol, { alignItems: 'flex-end' }]}>
                 <Text style={styles.timeLabel}>Selesai</Text>
-                <Text style={styles.timeValue}>{kelas.timeEnd || '--:--'}</Text>
+                <Text style={styles.timeValue}>{selectedTimes?.[1] || kelas.timeEnd || '--:--'}</Text>
               </View>
             </View>
 
@@ -180,25 +210,29 @@ export default function DetailSesiScreen() {
             </View>
 
             <Pressable
-              onPress={() => setShowModal(true)}
-              disabled={!isOpen}
+              accessibilityRole="button"
+              onPress={() => { setConfirmationSessionId(selectedSession?.id || ''); setSubmitError(null); setSuccess(false); setShowModal(true); }}
+              disabled={!isOpen || !ready || recorded || requested || profile?.role !== 'praktikan'}
               style={({ pressed }) => [
                 styles.button,
-                !isOpen && { backgroundColor: '#94A3B8' },
+                (!isOpen || !ready || recorded || requested) && { backgroundColor: '#94A3B8' },
                 pressed && isOpen && { opacity: 0.85 },
               ]}
             >
               <Text style={styles.buttonText}>
-                {isOpen ? 'Isi Presensi' : isUpcoming ? 'Belum Dibuka' : 'Sesi Ditutup'}
+                {recorded ? 'Presensi Tercatat' : requested ? 'Izin Sudah Diajukan' : !selectedSession ? 'Sesi Belum Tersedia' : isOpen ? 'Isi Presensi' : isUpcoming ? 'Belum Dibuka' : 'Sesi Ditutup'}
               </Text>
             </Pressable>
             {profile?.role === 'praktikan' ? (
               <Pressable accessibilityRole="button" accessibilityLabel="Ajukan Izin"
-                onPress={() => router.push('/izin')}
+                onPress={() => router.push({ pathname: '/izin', params: { courseName: kelas.course || '', className: kelas.name || '', ...(selectedSession ? { sessionId: selectedSession.id } : {}) } })}
                 style={[styles.button, { marginTop: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#1B2A4E' }]}>
                 <Text style={[styles.buttonText, { color: '#1B2A4E' }]}>Ajukan Izin</Text>
               </Pressable>
             ) : null}
+            {profile?.role === 'asisten' ? <Pressable accessibilityRole="button" onPress={() => router.push('/jadwal')} style={[styles.button, { marginTop: 12 }]}>
+              <Text style={styles.buttonText}>Kelola sesi</Text>
+            </Pressable> : null}
           </View>
         </View>
       </ScrollView>
@@ -208,10 +242,10 @@ export default function DetailSesiScreen() {
         visible={showModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowModal(false)}
+        onRequestClose={() => { if (!isSubmitting) setShowModal(false); }}
       >
         <View style={styles.modalOverlay}>
-          <Pressable style={styles.modalDismiss} onPress={() => setShowModal(false)} />
+          <Pressable style={styles.modalDismiss} onPress={() => { if (!isSubmitting) setShowModal(false); }} />
           <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
             <View style={styles.modalHandle} />
             {success ? (
@@ -234,11 +268,13 @@ export default function DetailSesiScreen() {
                   <Ionicons name="checkmark" size={36} color="#22C55E" />
                 </View>
                 <Text style={styles.modalTitle}>Konfirmasi Presensi</Text>
-                <Text style={styles.modalSubtitle}>Apakah Anda yakin ingin melakukan presensi?</Text>
+                <Text style={styles.modalSubtitle}>Apakah Anda yakin ingin melakukan presensi?{'\n'}{selectedSession?.dateLabel} · {selectedSession?.timeRange}</Text>
+                {submitError ? <Text accessibilityRole="alert" style={styles.selectionError}>{submitError}</Text> : null}
                 <Pressable
                   style={({ pressed }) => [styles.btnPrimary, pressed && { opacity: 0.9 }]}
                   onPress={handlePresensi}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !ready || recorded || requested || !isOpen || selectedSession?.id !== confirmationSessionId}
+                  accessibilityRole="button"
                 >
                   {isSubmitting ? (
                     <ActivityIndicator color="#FFFFFF" />
@@ -263,6 +299,10 @@ export default function DetailSesiScreen() {
 }
 
 const styles = StyleSheet.create({
+  sessionSelection: { gap: 10, marginBottom: 16 },
+  selectionHint: { color: '#52627A', fontSize: 14, lineHeight: 21 },
+  selectionError: { color: '#B91C1C', fontSize: 14, lineHeight: 21 },
+  sessionChoice: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, backgroundColor: '#FFFFFF', padding: 12, minHeight: 48, justifyContent: 'center' },
   screen: { flex: 1, backgroundColor: '#F5F7FA' },
   inner: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 16 },
   header: { backgroundColor: '#1B2A4E', paddingBottom: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Modal, Text, TextInput, View } from 'react-native';
 
 import { Action, DataState, PractitionerScreen, ui } from '@/components/practitioner-ui';
@@ -9,20 +9,28 @@ import { validateReason } from '@/services/practitioner-service';
 import { firebaseErrorMessage } from '@/utils/firebase-error';
 
 export default function PermissionScreen() {
+  const params = useLocalSearchParams<{ courseName?: string | string[]; className?: string | string[]; sessionId?: string | string[] }>();
+  const courseName = Array.isArray(params.courseName) ? params.courseName[0] : params.courseName;
+  const className = Array.isArray(params.className) ? params.className[0] : params.className;
+  const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+  const normalizeClass = (value: string) => normalize(value).replace(/^kelas\s+/, '');
   const colors = useAttendanceTheme();
   const { sessions, records, permissions, sessionState, attendanceState, permissionState, submitPermission, retry } = useAttendance();
-  const [sessionId, setSessionId] = useState('');
+  const [sessionId, setSessionId] = useState(() => (Array.isArray(params.sessionId) ? params.sessionId[0] : params.sessionId) || '');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState(false);
   const lock = useRef(false);
   const eligible = sessions.filter((session) => session.status !== 'closed'
+    && (!courseName || normalize(session.courseName) === normalize(courseName))
+    && (!className || normalizeClass(session.className) === normalizeClass(className))
     && !records.some((record) => record.sessionId === session.id)
     && !permissions.some((request) => request.sessionId === session.id));
   const selected = eligible.find((session) => session.id === sessionId);
   const ready = !sessionState.loading && !attendanceState.loading && !permissionState.loading
-    && !sessionState.error && !attendanceState.error && !permissionState.error && !sessionState.fromCache;
+    && !sessionState.error && !attendanceState.error && !permissionState.error
+    && !sessionState.fromCache && !attendanceState.fromCache && !permissionState.fromCache;
 
   async function submit() {
     if (lock.current) return;
@@ -42,6 +50,7 @@ export default function PermissionScreen() {
 
   return <PractitionerScreen title="Pengajuan izin">
     <Action label="Kembali ke sesi" onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/home'); }} />
+    {courseName ? <Text style={[ui.heading, { color: colors.ink }]}>{courseName}{className ? ` · ${className}` : ''}</Text> : null}
     <Text style={[ui.body, { color: colors.inkMuted }]}>Jelaskan ketidakhadiranmu. Keputusan diberikan oleh asisten; hasil AI hanya informasi pendukung.</Text>
     <DataState {...sessionState} retry={retry} />
     <DataState {...attendanceState} retry={retry} />
