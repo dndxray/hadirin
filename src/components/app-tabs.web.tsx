@@ -39,6 +39,9 @@ export default function AppTabs() {
               <TabTrigger name="kelas" href="/kelas" asChild>
                 <TabButton icon="school" label="Kelas" />
               </TabTrigger>
+              <TabTrigger name="izin" href="/izin" asChild>
+                <TabButton icon="document-text" label="Izin" />
+              </TabTrigger>
             </>
           ) : (
             <>
@@ -119,6 +122,7 @@ export function CustomTabList({
   );
 }
 
+// --- BAGIAN INI YANG TADI KEPOTONG ---
 const styles = StyleSheet.create({
   wrap: {
     position: 'absolute',
@@ -126,7 +130,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     alignItems: 'center',
-    zIndex: 999, // <--- INI KUNCINYA BIAR GAK KETUTUP SCROLLVIEW
+    zIndex: 999, // Biar tab bar selalu di paling atas
   },
   bar: {
     flexDirection: 'row',

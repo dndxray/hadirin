@@ -8,7 +8,14 @@ service cloud.firestore {
 
     function isAsisten() {
       return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'asisten';
+    }
+
+    function isPraktikan() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'praktikan';
     }
 
     // Profil akun
@@ -27,15 +34,14 @@ service cloud.firestore {
       allow create, update, delete: if isAsisten();
     }
 
-    function isPraktikan() {
-      return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'praktikan';
-    }
     function sessionData(id) {
       return get(/databases/$(database)/documents/sessions/$(id)).data;
     }
+    
     function participant(id) {
       return isPraktikan() && request.auth.uid in sessionData(id).participantIds;
     }
+
     function validSummary(data) {
       let s = sessionData(data.sessionId);
       return data.session == {
@@ -44,13 +50,15 @@ service cloud.firestore {
         'room': s.room, 'assistantName': s.assistantName
       };
     }
-    // SRS-15 integration boundary: participantIds contains Firebase UIDs.
+
+    // Sesi Praktikum
     match /sessions/{id} {
       allow read: if isAsisten() || (isPraktikan() && request.auth.uid in resource.data.participantIds);
       allow create, update, delete: if isAsisten();
     }
+
+    // Presensi Kehadiran
     match /attendance/{id} {
-      // Transactions also read the currently missing canonical document.
       allow get: if isAsisten() || (isPraktikan() &&
         (!exists(/databases/$(database)/documents/attendance/$(id)) || resource.data.practitionerId == request.auth.uid));
       allow list: if isAsisten() || (isPraktikan() && resource.data.practitionerId == request.auth.uid);
@@ -65,10 +73,15 @@ service cloud.firestore {
         && !existsAfter(/databases/$(database)/documents/permissionRequests/$(id));
       allow update, delete: if false;
     }
+
+    // Pengajuan Izin
     match /permissionRequests/{id} {
+      // Asisten bisa baca semua, Praktikan cuma baca miliknya sendiri
       allow get: if isAsisten() || (isPraktikan() &&
         (!exists(/databases/$(database)/documents/permissionRequests/$(id)) || resource.data.practitionerId == request.auth.uid));
       allow list: if isAsisten() || (isPraktikan() && resource.data.practitionerId == request.auth.uid);
+      
+      // Praktikan ngajuin izin
       allow create: if isPraktikan()
         && request.resource.data.keys().hasOnly(['sessionId', 'practitionerId', 'reason', 'status', 'createdAt', 'session', 'ai'])
         && request.resource.data.practitionerId == request.auth.uid
@@ -82,8 +95,8 @@ service cloud.firestore {
         && request.resource.data.ai == {'status': 'pending'}
         && validSummary(request.resource.data)
         && !existsAfter(/databases/$(database)/documents/attendance/$(id));
-      // SRS-14/16: assistant or trusted Admin SDK worker handles classification.
-      // AI updates cannot modify decisions; decision updates require assistant UID/time.
+        
+      // Asisten ngasih keputusan (Approve/Reject) atau update hasil AI
       allow update: if isAsisten() && (
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ai'])
           && request.resource.data.ai.keys().hasOnly(['status', 'category', 'error'])
@@ -95,6 +108,7 @@ service cloud.firestore {
           && request.resource.data.decidedBy == request.auth.uid
           && request.resource.data.decidedAt == request.time)
       );
+      
       allow delete: if false;
     }
   }

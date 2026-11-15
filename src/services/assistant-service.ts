@@ -221,25 +221,6 @@ export async function setSessionStatus(
   if (!snap.exists()) {
     throw new Error('Sesi praktikum tidak ditemukan di server.');
   }
-
-  const currentData = snap.data();
-  const currentStatus = currentData.status as SessionStatus;
-
-  // Guard: Sesi yang sudah ditutup tidak boleh diaktifkan kembali
-  if (isSessionClosed(currentStatus)) {
-    throw new Error('Sesi praktikum telah ditutup dan tidak dapat dibuka kembali.');
-  }
-
-  // Guard: Hanya boleh buka jika status saat ini belum dibuka / upcoming
-  if (newStatus === 'open' && !isSessionUpcoming(currentStatus)) {
-    throw new Error('Hanya sesi yang belum dibuka yang dapat diaktifkan.');
-  }
-
-  // Guard: Hanya boleh tutup jika status saat ini sedang open
-  if (newStatus === 'closed' && !isSessionOpen(currentStatus)) {
-    throw new Error('Hanya sesi yang sedang aktif yang dapat ditutup.');
-  }
-
   await updateDoc(sessionRef, {
     status: newStatus,
   });
