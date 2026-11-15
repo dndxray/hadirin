@@ -19,14 +19,14 @@ export default function AppTabs() {
   const role = useRole();
 
   return (
-    <Tabs>
+    <Tabs style={{ flex: 1 }}>
       <TabSlot style={{ flex: 1, width: '100%' }} />
 
       <TabList asChild>
         <CustomTabList>
           {role === 'asisten' ? (
             <>
-              <TabTrigger name="jadwal" href="/jadwal" asChild>
+              <TabTrigger name="home" href="/home" asChild>
                 <TabButton icon="home" label="Home" />
               </TabTrigger>
               <TabTrigger name="kelas" href="/kelas" asChild>
@@ -35,7 +35,7 @@ export default function AppTabs() {
             </>
           ) : (
             <>
-              <TabTrigger name="presensi" href="/presensi" asChild>
+              <TabTrigger name="home" href="/home" asChild>
                 <TabButton icon="home" label="Home" />
               </TabTrigger>
               <TabTrigger name="explore" href="/explore" asChild>
@@ -98,6 +98,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     alignItems: 'center',
+    zIndex: 999, // <--- INI KUNCINYA BIAR GAK KETUTUP SCROLLVIEW
   },
   bar: {
     flexDirection: 'row',
