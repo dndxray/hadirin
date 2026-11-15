@@ -1,19 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { authColors } from '@/components/auth-ui';
-import { DataState, PractitionerScreen, ui } from '@/components/practitioner-ui';
+import { DataState } from '@/components/practitioner-ui';
 import { PermissionHistory } from '@/components/permission-history';
-import { useAttendanceTheme } from '@/constants/attendance-theme';
 import { StateView } from '@/components/state-view';
-import { BottomTabInset, MaxContentWidth } from '@/constants/theme';
-import { useApp } from '@/context/app-context';
+import { BottomTabInset } from '@/constants/theme';
 import { useAttendance } from '@/context/attendance-context';
-import { practiceSessions } from '@/data/dummy-attendance';
-import type { AttendanceRecord, PracticeSession } from '@/types/attendance';
+import { useAuth } from '@/context/auth-context';
+import type { CloudAttendance, SessionSummary } from '@/types/practitioner';
+import { formatAttendanceTime } from '@/utils/attendance-format';
 import { initials } from '@/utils/home-format';
 
 const MONTHS = [
@@ -21,7 +20,7 @@ const MONTHS = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
 
-type HistoryItem = { record: AttendanceRecord; session: PracticeSession };
+type HistoryItem = { record: CloudAttendance; session: SessionSummary };
 type Group = { label: string; items: HistoryItem[] };
 
 function monthLabel(ts: number) {
@@ -36,33 +35,39 @@ function dateLabel(ts: number) {
 
 export default function AttendanceHistoryScreen() {
   const insets = useSafeAreaInsets();
-  const { currentUser } = useApp();
-  const { records } = useAttendance();
+  const { profile, loading: authLoading } = useAuth();
+  const { records, sessions, attendanceState, sessionState, retry } = useAttendance();
   const [showFilter, setShowFilter] = useState(false);
   const [course, setCourse] = useState<string | null>(null);
 
   const history: HistoryItem[] = records
-    .filter((r) => r.practitionerId === currentUser?.id)
     .map((record) => ({
       record,
-      session: practiceSessions.find((s) => s.id === record.sessionId),
+      session: record.session,
     }))
-    .filter((item): item is HistoryItem => item.session !== undefined)
-    .sort((a, b) => b.record.checkedInAt - a.record.checkedInAt);
+    .sort((a, b) => (b.record.checkedInAt ?? 0) - (a.record.checkedInAt ?? 0));
 
-  const held = practiceSessions.filter((s) => s.status !== 'upcoming').length;
+  const held = new Set([
+    ...sessions.filter((s) => s.status !== 'upcoming').map((s) => s.id),
+    ...records.map((record) => record.sessionId),
+  ]).size;
   const percent = held > 0 ? Math.min(100, Math.round((history.length / held) * 100)) : 0;
+  const summaryReady = !attendanceState.loading && !attendanceState.error && !sessionState.loading && !sessionState.error;
 
   const courses = Array.from(new Set(history.map((h) => h.session.courseName)));
   const visible = course ? history.filter((h) => h.session.courseName === course) : history;
 
   const groups: Group[] = [];
   visible.forEach((item) => {
-    const label = monthLabel(item.record.checkedInAt);
+    const label = item.record.checkedInAt ? monthLabel(item.record.checkedInAt) : 'Menunggu waktu server';
     const last = groups[groups.length - 1];
     if (last && last.label === label) last.items.push(item);
     else groups.push({ label, items: [item] });
   });
+
+  if (authLoading) return <StateView kind="loading" />;
+  if (!profile) return <Redirect href="/login" />;
+  if (profile.role !== 'praktikan') return <Redirect href="/home" />;
 
   return (
     <View style={styles.screen}>
@@ -82,27 +87,29 @@ export default function AttendanceHistoryScreen() {
             <View style={styles.summary}>
               <View style={styles.summaryRow}>
                 <View>
-                  <Text style={styles.summaryBig}>{percent}%</Text>
+                  <Text style={styles.summaryBig}>{summaryReady ? `${percent}%` : '—'}</Text>
                   <Text style={styles.summaryLabel}>Tingkat Kehadiran</Text>
                 </View>
                 <View>
-                  <Text style={styles.summaryBig}>{history.length}</Text>
+                  <Text style={styles.summaryBig}>{attendanceState.loading || attendanceState.error ? '—' : history.length}</Text>
                   <Text style={styles.summaryLabel}>Total Hadir</Text>
                 </View>
               </View>
               <View style={styles.track}>
-                <View style={[styles.fill, { width: `${percent}%` }]} />
+                <View style={[styles.fill, { width: `${summaryReady ? percent : 0}%` }]} />
               </View>
             </View>
 
-            {history.length === 0 ? (
+            <View style={{ marginTop: 20 }}><DataState {...attendanceState} retry={retry} /></View>
+            {sessionState.error ? <Text style={{ color: '#B91C1C', marginTop: 12 }}>Ringkasan persentase belum dapat dihitung. {sessionState.error}</Text> : null}
+            {!attendanceState.loading && !attendanceState.error && history.length === 0 ? (
               <View style={{ marginTop: 24 }}>
                 <StateView
                   kind="empty"
                   title="Belum ada presensi"
                   message="Saat presensi berhasil, sesi yang kamu hadiri akan muncul di sini."
                   actionLabel="Lihat Sesi"
-                  onAction={() => router.push('/presensi')}
+                  onAction={() => router.push('/home')}
                 />
               </View>
             ) : (
@@ -118,6 +125,8 @@ export default function AttendanceHistoryScreen() {
                       return (
                         <Pressable
                           key={c ?? 'semua'}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
                           onPress={() => setCourse(c)}
                           style={[styles.chip, active && styles.chipActive]}
                         >
@@ -137,6 +146,8 @@ export default function AttendanceHistoryScreen() {
                       {gi === 0 ? (
                         <Pressable
                           style={styles.filterPill}
+                          accessibilityRole="button"
+                          accessibilityState={{ expanded: showFilter }}
                           onPress={() => setShowFilter((v) => !v)}
                         >
                           <Ionicons name="funnel-outline" size={12} color={authColors.navy} />
@@ -154,7 +165,8 @@ export default function AttendanceHistoryScreen() {
                           <Text style={styles.cardTitle} numberOfLines={1}>
                             {session.courseName}
                           </Text>
-                          <Text style={styles.cardDate}>{dateLabel(record.checkedInAt)}</Text>
+                          <Text style={styles.cardDate}>{record.checkedInAt ? `${dateLabel(record.checkedInAt)} · ${formatAttendanceTime(record.checkedInAt)}` : 'Menunggu waktu server'}</Text>
+                          <Text style={styles.cardDate}>{session.className}</Text>
                         </View>
                         <View style={styles.badge}>
                           <View style={styles.badgeDot} />
@@ -166,6 +178,7 @@ export default function AttendanceHistoryScreen() {
                 ))}
               </>
             )}
+            <View style={{ marginTop: 28 }}><PermissionHistory /></View>
           </View>
         </View>
       </ScrollView>
