@@ -3,13 +3,15 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 import { authColors } from '@/components/auth-ui';
 import { StateView } from '@/components/state-view';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { getSessionStatus } from '@/utils/session-status';
+import { SessionFormModal } from '../../features/asisten/components/SessionFormModal';
+import { createSession } from '@/services/assistant-service';
 
 const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const MONTHS = [
@@ -17,7 +19,6 @@ const MONTHS = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
 
-// Status UI yang nyambung sama fungsi getSessionStatus
 const STATUS_UI = {
   open: { label: 'Dibuka', dot: '#22C55E', bg: '#E6F6EC', fg: '#15803D' },
   upcoming: { label: 'Belum Dibuka', dot: '#94A3B8', bg: '#EEF1F6', fg: '#64748B' },
@@ -50,6 +51,7 @@ function initials(text: string) {
 }
 
 export function AsistenHome() {
+  const [showAddModal, setShowAddModal] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
@@ -59,31 +61,31 @@ export function AsistenHome() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // 1. Tarik data dari koleksi 'classes'
-        const classSnap = await getDocs(collection(db, 'classes'));
-        const classData = classSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setClasses(classData);
+    const qSessions = query(collection(db, 'sessions'));
+    const unsubSessions = onSnapshot(qSessions, (snapshot) => {
+      const classData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setClasses(classData);
+      setLoading(false);
+    }, (error) => {
+      console.error("Gagal load sesi:", error);
+      setLoading(false);
+    });
 
-        // 2. Tarik data dari koleksi 'users' yang rolenya 'praktikan'
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('role', '==', 'praktikan'));
-        const userSnap = await getDocs(q);
-        setTotalPraktikan(userSnap.size);
+    const usersRef = collection(db, 'users');
+    const qUsers = query(usersRef, where('role', '==', 'praktikan'));
+    const unsubUsers = onSnapshot(qUsers, (snapshot) => {
+      setTotalPraktikan(snapshot.size);
+    });
 
-      } catch (error) {
-        console.error("Gagal load data asisten:", error);
-      } finally {
-        setLoading(false);
-      }
+    return () => {
+      unsubSessions();
+      unsubUsers();
     };
-    fetchData();
   }, []);
 
   const name = profile?.name ?? '';
   const firstName = name.split(/\s+/)[0] || 'Asisten';
-  const courseCount = new Set(classes.map((c) => c.course)).size;
+  const courseCount = new Set(classes.map((c) => c.courseName)).size;
 
   return (
     <View style={styles.screen}>
@@ -91,7 +93,6 @@ export function AsistenHome() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 130 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header navy */}
         <View style={[styles.header, { paddingTop: insets.top + 36 }]}>
           <View style={[styles.inner, styles.headerRow]}>
             <View style={{ flex: 1 }}>
@@ -106,7 +107,6 @@ export function AsistenHome() {
 
         <View style={styles.body}>
           <View style={styles.inner}>
-            {/* Ringkasan (Stats) */}
             <View style={styles.summary}>
               <View style={styles.summaryItem}>
                 <View style={styles.summaryIcon}>
@@ -121,10 +121,26 @@ export function AsistenHome() {
                 <Text style={styles.summaryText}>{totalPraktikan} Praktikan</Text>
               </View>
             </View>
+            
+            <Pressable 
+              onPress={() => setShowAddModal(true)}
+              style={{ 
+                flexDirection: 'row', 
+                backgroundColor: '#1B2A4E', 
+                paddingVertical: 14, 
+                borderRadius: 16, 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                marginTop: 16,
+                marginBottom: 16 
+              }}
+            >
+              <Ionicons name="add" size={20} color="#FFF" />
+              <Text style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 8 }}>Tambah Jadwal Sesi</Text>
+            </Pressable>
 
             <Text style={styles.sectionTitle}>Jadwal Praktikum</Text>
 
-            {/* Banner tanggal */}
             <View style={styles.dateBanner}>
               <View style={styles.dateIcon}>
                 <Ionicons name="calendar-outline" size={22} color={authColors.white} />
@@ -135,7 +151,6 @@ export function AsistenHome() {
               </View>
             </View>
 
-            {/* Daftar Kelas dari Firebase */}
             {loading ? (
               <ActivityIndicator size="large" color={authColors.navy} style={{ marginTop: 20 }} />
             ) : classes.length === 0 ? (
@@ -146,10 +161,9 @@ export function AsistenHome() {
               />
             ) : (
               classes.map((c) => {
-                // Cek status otomatis pakai utility jam GMT+7
                 const statusType = getSessionStatus(c); 
                 const st = STATUS_UI[statusType];
-                const participantCount = c.participants?.length || 0;
+                const participantCount = c.participantIds?.length || c.participants?.length || 0;
 
                 return (
                   <Pressable
@@ -164,14 +178,14 @@ export function AsistenHome() {
 
                     <View style={styles.cardTop}>
                       <View style={styles.cardAvatar}>
-                        <Text style={styles.cardAvatarText}>{initials(c.course || '')}</Text>
+                        <Text style={styles.cardAvatarText}>{initials(c.courseName || '')}</Text>
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.cardTitle} numberOfLines={2}>
-                          {c.course}
+                          {c.courseName}
                         </Text>
                         <Text style={styles.cardSub}>
-                          {c.name} · {c.room}
+                          {c.className} · {c.room}
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={22} color={authColors.ink} />
@@ -183,7 +197,7 @@ export function AsistenHome() {
                       <View style={styles.timeRow}>
                         <Ionicons name="time-outline" size={14} color={authColors.muted} />
                         <Text style={styles.timeText}>
-                          {c.dateLabel || 'Tanggal belum diatur'} · {c.timeStart || '--'} - {c.timeEnd || '--'}
+                          {c.dateLabel || 'Tanggal belum diatur'} · {c.timeRange || `${c.startTime || '--'} - ${c.endTime || '--'}`}
                         </Text>
                       </View>
                       {participantCount > 0 ? (
@@ -199,6 +213,20 @@ export function AsistenHome() {
           </View>
         </View>
       </ScrollView>
+
+      <SessionFormModal
+        visible={showAddModal}
+        mode="create"
+        onClose={() => setShowAddModal(false)}
+        onSubmit={async (data) => {
+          try {
+            await createSession(data, profile?.name || 'Asisten');
+            setShowAddModal(false);
+          } catch (error: any) {
+            alert(error.message);
+          }
+        }}
+      />
     </View>
   );
 }
@@ -257,7 +285,7 @@ const styles = StyleSheet.create({
     color: authColors.ink,
     fontSize: 22,
     fontWeight: '800',
-    marginTop: 26,
+    marginTop: 10,
     marginBottom: 14,
   },
 

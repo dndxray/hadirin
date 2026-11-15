@@ -39,7 +39,7 @@ export default function AppTabs() {
               <TabTrigger name="kelas" href="/kelas" asChild>
                 <TabButton icon="school" label="Kelas" />
               </TabTrigger>
-              <TabTrigger name="izin" href="/izin" asChild>
+              <TabTrigger name="permissions" href="/permissions" asChild>
                 <TabButton icon="document-text" label="Izin" />
               </TabTrigger>
             </>
@@ -122,7 +122,6 @@ export function CustomTabList({
   );
 }
 
-// --- BAGIAN INI YANG TADI KEPOTONG ---
 const styles = StyleSheet.create({
   wrap: {
     position: 'absolute',
@@ -130,7 +129,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     alignItems: 'center',
-    zIndex: 999, // Biar tab bar selalu di paling atas
+    zIndex: 999,
   },
   bar: {
     flexDirection: 'row',

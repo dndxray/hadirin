@@ -57,11 +57,9 @@ export function SessionFormModal({
   onClose,
   onSubmit,
 }: SessionFormModalProps) {
-  // Course & Class Data
   const [courses, setCourses] = useState<CourseData[]>([]);
   const [classes, setClasses] = useState<ClassData[]>([]);
 
-  // Form Fields
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [courseName, setCourseName] = useState('');
   const [courseCode, setCourseCode] = useState('');
@@ -70,14 +68,12 @@ export function SessionFormModal({
   const [description, setDescription] = useState('');
   const [participantIds, setParticipantIds] = useState<string[]>([]);
 
-  // Date & Time Picker states (PRD R4)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
   const [startTime, setStartTime] = useState('13:00');
   const [endTime, setEndTime] = useState('15:00');
 
-  // Participant Mapping Status
   const [mapping, setMapping] = useState<{
     mapped: number;
     total: number;
@@ -88,7 +84,6 @@ export function SessionFormModal({
   const [busy, setBusy] = useState(false);
   const mappingRequest = useRef(0);
 
-  // Subscribe to Courses and Classes
   useEffect(() => {
     const unsubClasses = subscribeClasses(
       (items) => setClasses(items),
@@ -117,7 +112,6 @@ export function SessionFormModal({
     setError(null);
     setShowCalendar(false);
 
-    // Parse initial Date if available
     if (initialData?.date instanceof Date) {
       setSelectedDate(initialData.date);
       setCalendarMonth(new Date(initialData.date.getFullYear(), initialData.date.getMonth(), 1));
@@ -131,7 +125,6 @@ export function SessionFormModal({
       setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1));
     }
 
-    // Parse initial Time if available
     if (initialData?.startTime && initialData?.endTime) {
       setStartTime(initialData.startTime);
       setEndTime(initialData.endTime);
@@ -144,7 +137,6 @@ export function SessionFormModal({
     }
   };
 
-  // PRD R5: Dropdown / selector Mata Kuliah dengan Autofill
   const handleSelectCourse = (c: CourseData) => {
     setSelectedCourseId(c.id);
     setCourseName(c.name);
@@ -156,7 +148,6 @@ export function SessionFormModal({
       setDescription(c.defaultDescription);
     }
 
-    // If there is an existing class matching this course, auto-suggest it
     const matchingClass = classes.find(
       (cls) => cls.course.toLowerCase() === c.name.toLowerCase()
     );
@@ -165,7 +156,6 @@ export function SessionFormModal({
     }
   };
 
-  // Select class and resolve student participant UIDs
   const handleSelectClass = async (c: ClassData) => {
     const requestId = ++mappingRequest.current;
     setClassName(c.name);
@@ -189,7 +179,6 @@ export function SessionFormModal({
     });
   };
 
-  // Quick Date Presets (Hari Ini, Besok, Minggu Depan)
   const setQuickDate = (daysAhead: number) => {
     const d = new Date();
     d.setDate(d.getDate() + daysAhead);
@@ -197,7 +186,6 @@ export function SessionFormModal({
     setCalendarMonth(new Date(d.getFullYear(), d.getMonth(), 1));
   };
 
-  // Calendar days generator
   const renderCalendarGrid = () => {
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
@@ -206,12 +194,10 @@ export function SessionFormModal({
 
     const cells: React.ReactNode[] = [];
 
-    // Empty cells before month start
     for (let i = 0; i < firstDayIndex; i++) {
       cells.push(<View key={`empty-${i}`} style={styles.calendarCell} />);
     }
 
-    // Day cells
     for (let day = 1; day <= totalDaysInMonth; day++) {
       const isSelected =
         selectedDate.getFullYear() === year &&
@@ -254,14 +240,12 @@ export function SessionFormModal({
   };
 
   const handleSave = async () => {
-    // Validasi R1, R4, R5
     if (!courseName.trim()) return setError('Nama mata praktikum wajib diisi.');
     if (!className.trim()) return setError('Kelas praktikum wajib diisi.');
     if (!room.trim()) return setError('Ruangan praktikum wajib diisi.');
     if (!selectedDate) return setError('Tanggal jadwal wajib dipilih.');
     if (!startTime.trim() || !endTime.trim()) return setError('Jam mulai dan jam selesai praktikum wajib diisi.');
 
-    // Validasi waktu: jam selesai harus setelah jam mulai (PRD R4)
     const [startH, startM] = startTime.split(':').map((v) => parseInt(v, 10));
     const [endH, endM] = endTime.split(':').map((v) => parseInt(v, 10));
 
@@ -305,7 +289,6 @@ export function SessionFormModal({
     }
   };
 
-  // Filter classes according to selected course if course is chosen
   const filteredClasses = classes.filter((cls) => {
     if (!courseName) return true;
     return !cls.course || cls.course.toLowerCase() === courseName.toLowerCase();
@@ -338,7 +321,6 @@ export function SessionFormModal({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* 1. PRD R5: Pilihan Mata Kuliah dengan Auto-fill */}
             <View style={styles.fieldGroup}>
               <View style={styles.fieldHeaderRow}>
                 <Text style={styles.label}>1. Pilih Mata Kuliah (Autofill):</Text>
@@ -373,7 +355,6 @@ export function SessionFormModal({
               </ScrollView>
             </View>
 
-            {/* Nama Praktikum & Kode */}
             <View style={styles.row}>
               <View style={[styles.fieldGroup, { flex: 2 }]}>
                 <Text style={styles.label}>Nama Mata Praktikum *</Text>
@@ -400,45 +381,46 @@ export function SessionFormModal({
               </View>
             </View>
 
-            {/* 2. Pilihan Kelas (Filtered by Course) */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>2. Pilih Dari Kelas Tersedia:</Text>
               {filteredClasses.length > 0 ? (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.chipRow}>
-                    {filteredClasses.map((c) => (
-                      <Pressable
-                        key={c.id}
-                        style={[
-                          styles.chip,
-                          className === c.name && styles.chipActive,
-                        ]}
-                        onPress={() => void handleSelectClass(c)}
-                      >
-                        <Text
+                <>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.chipRow}>
+                      {filteredClasses.map((c) => (
+                        <Pressable
+                          key={c.id}
                           style={[
-                            styles.chipText,
-                            className === c.name && styles.chipTextActive,
+                            styles.chip,
+                            className === c.name && styles.chipActive,
                           ]}
+                          onPress={() => void handleSelectClass(c)}
                         >
-                          {c.name} ({c.room || 'Lab'})
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </ScrollView>
-                {mapping ? (
-                  <Text style={styles.mappingText}>
-                    {mapping.total === 0
-                      ? 'Kelas ini belum memiliki peserta.'
-                      : `${mapping.mapped} dari ${mapping.total} peserta terpetakan ke akun.`}
-                    {mapping.unmatched.length > 0
-                      ? ' Sebagian peserta belum dapat dipetakan. Pastikan NIM profil terisi dan tidak ganda.'
-                      : ''}
-                  </Text>
-                ) : null}
-              </View>
-            )}
+                          <Text
+                            style={[
+                              styles.chipText,
+                              className === c.name && styles.chipTextActive,
+                            ]}
+                          >
+                            {c.name} ({c.room || 'Lab'})
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </ScrollView>
+                  {mapping ? (
+                    <Text style={styles.mappingText}>
+                      {mapping.total === 0
+                        ? 'Kelas ini belum memiliki peserta.'
+                        : `${mapping.mapped} dari ${mapping.total} peserta terpetakan ke akun.`}
+                      {mapping.unmatched.length > 0
+                        ? ' Sebagian peserta belum dapat dipetakan. Pastikan NIM profil terisi dan tidak ganda.'
+                        : ''}
+                    </Text>
+                  ) : null}
+                </>
+              ) : null}
+            </View>
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Nama Mata Praktikum *</Text>
@@ -452,7 +434,6 @@ export function SessionFormModal({
               />
             </View>
 
-            {/* Kelas & Ruangan */}
             <View style={styles.row}>
               <View style={[styles.fieldGroup, { flex: 1 }]}>
                 <Text style={styles.label}>Kelas *</Text>
@@ -484,7 +465,6 @@ export function SessionFormModal({
               </View>
             </View>
 
-            {/* 3. PRD R4: Date Picker Kalender */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>3. Tanggal Praktikum (Kalender) *</Text>
               <Pressable
@@ -503,7 +483,6 @@ export function SessionFormModal({
                 <Text style={styles.dropdownArrow}>{showCalendar ? '▲' : '▼'}</Text>
               </Pressable>
 
-              {/* Quick Presets */}
               <View style={styles.presetRow}>
                 <Pressable
                   style={styles.presetButton}
@@ -525,10 +504,8 @@ export function SessionFormModal({
                 </Pressable>
               </View>
 
-              {/* Kalender Popdown / Inline Picker */}
               {showCalendar && (
                 <View style={styles.calendarContainer}>
-                  {/* Calendar Header Month & Year */}
                   <View style={styles.calendarHeader}>
                     <Pressable
                       style={styles.calendarNavButton}
@@ -558,7 +535,6 @@ export function SessionFormModal({
                     </Pressable>
                   </View>
 
-                  {/* Day Names Header */}
                   <View style={styles.dayNamesRow}>
                     {DAY_NAMES.map((name) => (
                       <View key={name} style={styles.calendarCell}>
@@ -567,7 +543,6 @@ export function SessionFormModal({
                     ))}
                   </View>
 
-                  {/* Days Grid */}
                   <View style={styles.calendarGrid}>
                     {renderCalendarGrid()}
                   </View>
@@ -575,11 +550,9 @@ export function SessionFormModal({
               )}
             </View>
 
-            {/* 4. PRD R4: Time Picker (Jam Mulai & Jam Selesai) */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>4. Waktu Praktikum (Jam Mulai & Selesai) *</Text>
               
-              {/* Preset Standard Slots */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={styles.chipRow}>
                   {STANDARD_TIME_SLOTS.map((slot) => {
@@ -611,7 +584,6 @@ export function SessionFormModal({
                 </View>
               </ScrollView>
 
-              {/* Custom Time Input Inputs */}
               <View style={[styles.row, { marginTop: 8 }]}>
                 <View style={[styles.fieldGroup, { flex: 1 }]}>
                   <Text style={styles.subLabel}>Jam Mulai (JJ:MM)</Text>
@@ -647,7 +619,6 @@ export function SessionFormModal({
               </Text>
             </View>
 
-            {/* Deskripsi */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Deskripsi / Topik Praktikum (Opsional)</Text>
               <TextInput
@@ -662,14 +633,12 @@ export function SessionFormModal({
               />
             </View>
 
-            {/* Error Banner */}
             {error && (
               <View style={styles.errorBox}>
                 <Text style={styles.errorText}>⚠️ {error}</Text>
               </View>
             )}
 
-            {/* Action Buttons */}
             <View style={styles.buttonRow}>
               <Pressable
                 disabled={busy}
