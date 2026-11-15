@@ -8,5 +8,5 @@ export default function Index() {
   if (loading) return null;
   if (!profile) return <Redirect href="/login" />;
 
-  return <Redirect href={profile.role === 'asisten' ? '/jadwal' : '/presensi'} />;
+  return <Redirect href="/home" />;
 }

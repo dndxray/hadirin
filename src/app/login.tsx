@@ -31,7 +31,7 @@ export default function LoginScreen() {
     try {
       const p = await login(email, password);
       setDummyUser(p.role);
-      router.replace(p.role === 'asisten' ? '/jadwal' : '/presensi');
+            router.replace('/home');
     } catch (e) {
       setError(
         e instanceof Error && !('code' in e) ? e.message : authErrorMessage(e),

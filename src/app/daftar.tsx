@@ -41,7 +41,7 @@ export default function DaftarScreen() {
     try {
       const p = await register(name, email, password, role);
       setDummyUser(p.role);
-      router.replace(p.role === 'asisten' ? '/jadwal' : '/presensi');
+    router.replace('/home');
     } catch (e) {
       setError(authErrorMessage(e));
     } finally {
