@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SessionEnrollment } from '@/components/session-enrollment';
 import { useAsisten } from '../../../../features/asisten/AsistenContext';
 import { SessionStatusBadge } from '../../../../features/asisten/components/SessionStatusBadge';
 import { ConfirmModal } from '../../../../features/asisten/components/ConfirmModal';
@@ -254,6 +255,8 @@ export default function SessionDetailScreen() {
           </Pressable>
         </View>
       </View>
+
+      <SessionEnrollment sessionId={session.id} participantIds={session.participantIds} />
 
       {actionError ? (
         <View style={styles.errorBanner}>

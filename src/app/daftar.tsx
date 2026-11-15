@@ -13,6 +13,7 @@ import {
 import { useApp } from '@/context/app-context';
 import { authErrorMessage, useAuth } from '@/context/auth-context';
 import type { Role } from '@/types/attendance';
+import { validateNim } from '@/utils/nim';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -26,6 +27,7 @@ export default function DaftarScreen() {
   const { login: setDummyUser } = useApp(); // sementara, sampai SRS-08
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [nim, setNim] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('praktikan');
   const [error, setError] = useState<string | null>(null);
@@ -33,13 +35,14 @@ export default function DaftarScreen() {
 
   const handleSubmit = async () => {
     if (!name.trim()) return setError('Nama wajib diisi.');
+    if (role === 'praktikan' && validateNim(nim)) return setError(validateNim(nim));
     if (!EMAIL_REGEX.test(email.trim())) return setError('Format email tidak valid.');
     if (password.length < 6) return setError('Kata sandi minimal 6 karakter.');
 
     setError(null);
     setSubmitting(true);
     try {
-      const p = await register(name, email, password, role);
+      const p = await register(name, email, password, role, nim);
       setDummyUser(p.role);
     router.replace('/home');
     } catch (e) {
@@ -80,6 +83,8 @@ export default function DaftarScreen() {
         autoCapitalize="none"
         keyboardType="email-address"
       />
+      {role === 'praktikan' ? <AuthField label="NIM" icon="card-outline" value={nim} onChangeText={setNim}
+        placeholder="Contoh: 123456789" autoCapitalize="characters" autoCorrect={false} maxLength={30} /> : null}
       <AuthField
         label="Kata sandi"
         icon="lock-closed-outline"

@@ -23,6 +23,7 @@ import type {
 } from '../../features/asisten/types';
 import { isSessionClosed, isSessionOpen, isSessionUpcoming } from '../../features/asisten/types';
 import { classifyReason } from './ai/classifier';
+import { normalizeNim } from '@/utils/nim';
 
 export type SessionInput = {
   courseName: string;
@@ -57,14 +58,10 @@ export async function resolvePractitionerProfile(
     if (userDoc.exists()) {
       const data = userDoc.data();
       const name = data.name || 'Praktikan';
-      const nim =
-        data.nim ||
-        (data.email && data.email.includes('@')
-          ? data.email.split('@')[0]
-          : uid.slice(0, 8));
+      const nim = data.nim || 'Belum diisi';
 
       const profile = { name, nim };
-      userProfileCache.set(uid, profile);
+      if (data.nim) userProfileCache.set(uid, profile);
       return profile;
     }
   } catch {
@@ -84,7 +81,8 @@ export type ParticipantMapping = {
 };
 
 // Classes store {nim, name}; sessions require Firebase UIDs. Match by explicit
-// NIM, email local-part, or exact name so existing accounts can be linked.
+// NIM only. Name/email fallbacks can enroll the wrong account, and duplicate
+// NIMs must be resolved by the operator rather than choosing the first account.
 export async function resolveParticipantUids(
   participants: ClassParticipant[]
 ): Promise<ParticipantMapping> {
@@ -105,6 +103,7 @@ export async function resolveParticipantUids(
         name: String(data.name ?? '').trim(),
         nim: String(data.nim ?? '').trim(),
         email: String(data.email ?? '').trim(),
+        role: data.role,
       };
     });
 
@@ -112,20 +111,11 @@ export async function resolveParticipantUids(
     const unmatched: ClassParticipant[] = [];
 
     for (const participant of participants) {
-      const nim = participant.nim.trim().toLowerCase();
-      const name = participant.name.trim().toLowerCase();
+      const nim = normalizeNim(participant.nim);
+      const matches = directory.filter((user) => user.role === 'praktikan' && !!user.nim && normalizeNim(user.nim) === nim);
 
-      const match = directory.find((user) => {
-        if (user.nim && user.nim.toLowerCase() === nim) return true;
-        if (user.email) {
-          const localPart = user.email.split('@')[0]?.toLowerCase();
-          if (localPart && localPart === nim) return true;
-        }
-        return user.name !== '' && user.name.toLowerCase() === name;
-      });
-
-      if (match) {
-        uids.add(match.uid);
+      if (matches.length === 1) {
+        uids.add(matches[0].uid);
       } else {
         unmatched.push(participant);
       }

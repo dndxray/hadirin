@@ -24,7 +24,7 @@ export const authColors = {
   border: '#E2E8F0',
   ink: '#1B2A4E',
   muted: '#64748B',
-  placeholder: '#94A3B8',
+  placeholder: '#52627A',
   danger: '#DC2626',
   dangerSoft: '#FEE2E2',
   white: '#FFFFFF',
@@ -93,6 +93,7 @@ export function AuthField({ label, icon, secureTextEntry, ...inputProps }: Field
       <View style={styles.field}>
         <Ionicons name={icon} size={18} color={authColors.muted} />
         <TextInput
+          accessibilityLabel={inputProps.accessibilityLabel ?? label}
           {...inputProps}
           style={styles.input}
           placeholderTextColor={authColors.placeholder}
@@ -175,6 +176,9 @@ export function AuthButton({
   return (
     <Pressable
       style={[styles.button, loading && styles.buttonDisabled]}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: loading, busy: loading }}
       onPress={onPress}
       disabled={loading}
     >

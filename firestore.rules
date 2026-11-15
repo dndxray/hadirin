@@ -12,19 +12,20 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'asisten';
     }
 
-    function isPraktikan() {
-      return signedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'praktikan';
+    function validNim(data) {
+      return !('nim' in data) || (data.nim is string && data.nim.matches('^[A-Z0-9][A-Z0-9._/-]{2,29}$'));
     }
 
     // Profil akun
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAsisten());
       allow create: if signedIn() && request.auth.uid == uid
-                    && request.resource.data.role in ['asisten', 'praktikan'];
+                    && request.resource.data.role in ['asisten', 'praktikan']
+                    && validNim(request.resource.data);
       allow update: if signedIn() && request.auth.uid == uid
-                    && request.resource.data.role == resource.data.role;
+                    && request.resource.data.role == resource.data.role
+                    && validNim(request.resource.data)
+                    && (!('nim' in resource.data) || resource.data.nim == '' || request.resource.data.nim == resource.data.nim);
       allow delete: if false;
     }
 
@@ -34,6 +35,11 @@ service cloud.firestore {
       allow create, update, delete: if isAsisten();
     }
 
+    function isPraktikan() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'praktikan';
+    }
     function sessionData(id) {
       return get(/databases/$(database)/documents/sessions/$(id)).data;
     }

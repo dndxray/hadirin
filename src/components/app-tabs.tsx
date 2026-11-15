@@ -15,7 +15,7 @@ export default function AppTabs() {
         selected: { color: authColors.navy },
       }}
     >
-      <NativeTabs.Trigger name="home" hidden={isAsisten}>
+      <NativeTabs.Trigger name="presensi" hidden={isAsisten}>
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           src={require('@/assets/images/tabIcons/home.png')}

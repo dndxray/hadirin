@@ -185,7 +185,7 @@ export function SessionFormModal({
                       ? 'Kelas ini belum memiliki peserta.'
                       : `${mapping.mapped} dari ${mapping.total} peserta terpetakan ke akun.`}
                     {mapping.unmatched.length > 0
-                      ? ' Sebagian peserta belum memiliki akun Firebase.'
+                      ? ' Sebagian peserta belum dapat dipetakan. Pastikan NIM profil terisi dan tidak ganda.'
                       : ''}
                   </Text>
                 ) : null}

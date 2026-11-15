@@ -3,15 +3,32 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AuthError, authColors } from '@/components/auth-ui';
+import { AuthButton, AuthError, AuthField, authColors } from '@/components/auth-ui';
 import { StateView } from '@/components/state-view';
 import { useApp } from '@/context/app-context';
+import { useAuth } from '@/context/auth-context';
+import { firebaseErrorMessage } from '@/utils/firebase-error';
+import { validateNim } from '@/utils/nim';
 
 export default function ProfilScreen() {
   const insets = useSafeAreaInsets();
-  const { currentUser, logout } = useApp();
+  const { currentUser } = useApp();
+  const { profile, saveNim, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nim, setNim] = useState('');
+  const [savingNim, setSavingNim] = useState(false);
+  const [nimError, setNimError] = useState<string | null>(null);
+
+  const handleSaveNim = async () => {
+    const invalid = validateNim(nim);
+    if (invalid) { setNimError(invalid); return; }
+    setNimError(null);
+    setSavingNim(true);
+    try { await saveNim(nim); }
+    catch (failure) { setNimError(firebaseErrorMessage(failure)); }
+    finally { setSavingNim(false); }
+  };
 
   const handleKeluar = async () => {
     setError(null);
@@ -70,8 +87,22 @@ export default function ProfilScreen() {
               <View style={styles.divider} />
               <InfoRow icon="mail-outline" label="Email" value={currentUser.identifier} />
               <View style={styles.divider} />
+              {!isAsisten ? <>
+                <InfoRow icon="card-outline" label="NIM" value={profile?.nim || 'Belum diisi'} />
+                <View style={styles.divider} />
+              </> : null}
               <InfoRow icon="shield-checkmark-outline" label="Peran" value={roleLabel} />
             </View>
+
+            {!isAsisten && !profile?.nim ? <View style={styles.nimForm}>
+              <Text style={styles.nimTitle}>Lengkapi NIM</Text>
+              <Text style={styles.nimHint}>Asisten menggunakan NIM untuk mencari akunmu dan menambahkanmu ke sesi.</Text>
+              <AuthField label="NIM" icon="card-outline" value={nim} onChangeText={setNim}
+                editable={!savingNim} placeholder="Contoh: 123456789" autoCapitalize="characters" autoCorrect={false} maxLength={30} />
+              <Text style={styles.nimHint}>Periksa sebelum menyimpan. NIM yang sudah tersimpan hanya dapat diperbaiki oleh pengelola.</Text>
+              <AuthError message={nimError} />
+              <AuthButton title="Simpan NIM" loading={savingNim} onPress={() => void handleSaveNim()} />
+            </View> : null}
 
             <AuthError message={error} />
 
@@ -160,6 +191,9 @@ const styles = StyleSheet.create({
 
   body: { alignItems: 'center', paddingHorizontal: 20, marginTop: -28 },
   bodyInner: { width: '100%', maxWidth: 560, gap: 14 },
+  nimForm: { backgroundColor: authColors.white, borderRadius: 20, padding: 20, gap: 14 },
+  nimTitle: { color: authColors.navy, fontSize: 18, fontWeight: '800' },
+  nimHint: { color: '#52627A', fontSize: 14, lineHeight: 21 },
   card: {
     backgroundColor: authColors.white,
     borderRadius: 20,

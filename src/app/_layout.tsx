@@ -35,6 +35,7 @@ function RootNavigator() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="(asisten)" />
           <Stack.Screen name="detail-sesi" />
+          <Stack.Screen name="izin" />
         </Stack.Protected>
       </Stack>
 
