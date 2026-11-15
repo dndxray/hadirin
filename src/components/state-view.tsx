@@ -45,7 +45,7 @@ export function StateView({ kind, title, message, actionLabel, onAction }: Props
       <Text style={styles.message}>{message ?? d.message}</Text>
 
       {actionLabel && onAction ? (
-        <Pressable style={styles.button} onPress={onAction}>
+        <Pressable accessibilityRole="button" style={styles.button} onPress={onAction}>
           <Text style={styles.buttonText}>{actionLabel}</Text>
         </Pressable>
       ) : null}
@@ -78,6 +78,8 @@ const styles = StyleSheet.create({
   title: { color: authColors.ink, fontSize: 16, fontWeight: '800', textAlign: 'center' },
   message: { color: authColors.muted, fontSize: 13, textAlign: 'center', lineHeight: 19 },
   button: {
+    minHeight: 44,
+    justifyContent: 'center',
     marginTop: 8,
     backgroundColor: authColors.navy,
     borderRadius: 12,

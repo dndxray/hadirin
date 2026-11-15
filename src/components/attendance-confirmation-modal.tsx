@@ -79,12 +79,12 @@ export function AttendanceConfirmationModal({
           <Text style={styles.heading}>{heading}</Text>
           <Text style={styles.message}>{message}</Text>
 
-          <Pressable style={styles.primary} onPress={primaryAction}>
-            <Text style={styles.primaryText}>{primaryLabel}</Text>
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} style={styles.primary} onPress={primaryAction}>
+            <Text style={styles.primaryText}>{busy ? 'Menyimpan presensi…' : primaryLabel}</Text>
           </Pressable>
 
           {isConfirm || isSuccess ? (
-            <Pressable style={styles.secondary} onPress={onClose}>
+            <Pressable accessibilityRole="button" disabled={busy} style={styles.secondary} onPress={onClose}>
               <Text style={styles.secondaryText}>{isConfirm ? 'Nanti Saja' : 'Tutup'}</Text>
             </Pressable>
           ) : null}

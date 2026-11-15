@@ -15,17 +15,12 @@ export default function AppTabs() {
         selected: { color: authColors.navy },
       }}
     >
-      <NativeTabs.Trigger name="presensi" hidden={isAsisten}>
+      <NativeTabs.Trigger name="home" hidden={isAsisten}>
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           src={require('@/assets/images/tabIcons/home.png')}
           renderingMode="template"
         />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="izin" hidden={isAsisten}>
-        <NativeTabs.Trigger.Label>Izin</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="doc.text" md="description" />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="explore" hidden={isAsisten}>
