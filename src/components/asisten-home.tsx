@@ -1,16 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
 import { authColors } from '@/components/auth-ui';
 import { StateView } from '@/components/state-view';
-import { useApp } from '@/context/app-context';
-import { useAsisten } from '../../features/asisten/AsistenContext';
-import { dummyRoster } from '../../features/asisten/dummyData';
-import type { SessionStatus } from '../../features/asisten/types';
-import { formatDate } from '../../features/asisten/utils/format';
+import { useAuth } from '@/context/auth-context';
+import { db } from '@/lib/firebase';
+import { getSessionStatus } from '@/utils/session-status';
 
 const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const MONTHS = [
@@ -18,10 +17,11 @@ const MONTHS = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
 
-const STATUS: Record<SessionStatus, { label: string; dot: string; bg: string; fg: string }> = {
-  OPEN: { label: 'Dibuka', dot: '#22C55E', bg: '#E6F6EC', fg: '#15803D' },
-  CLOSED: { label: 'Belum Dibuka', dot: '#94A3B8', bg: '#EEF1F6', fg: '#64748B' },
-  ENDED: { label: 'Ditutup', dot: '#EF4444', bg: '#FEE2E2', fg: '#B91C1C' },
+// Status UI yang nyambung sama fungsi getSessionStatus
+const STATUS_UI = {
+  open: { label: 'Dibuka', dot: '#22C55E', bg: '#E6F6EC', fg: '#15803D' },
+  upcoming: { label: 'Belum Dibuka', dot: '#94A3B8', bg: '#EEF1F6', fg: '#64748B' },
+  closed: { label: 'Ditutup', dot: '#EF4444', bg: '#FEE2E2', fg: '#B91C1C' },
 };
 
 function greeting() {
@@ -52,12 +52,38 @@ function initials(text: string) {
 export function AsistenHome() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser } = useApp();
-  const { sessions, getAttendances } = useAsisten();
+  const { profile } = useAuth();
+  
+  const [classes, setClasses] = useState<any[]>([]);
+  const [totalPraktikan, setTotalPraktikan] = useState(0);
+  const [loading, setLoading] = useState(true);
 
-  const name = currentUser?.name ?? '';
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // 1. Tarik data dari koleksi 'classes'
+        const classSnap = await getDocs(collection(db, 'classes'));
+        const classData = classSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setClasses(classData);
+
+        // 2. Tarik data dari koleksi 'users' yang rolenya 'praktikan'
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('role', '==', 'praktikan'));
+        const userSnap = await getDocs(q);
+        setTotalPraktikan(userSnap.size);
+
+      } catch (error) {
+        console.error("Gagal load data asisten:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const name = profile?.name ?? '';
   const firstName = name.split(/\s+/)[0] || 'Asisten';
-  const courseCount = new Set(sessions.map((s) => s.courseName)).size;
+  const courseCount = new Set(classes.map((c) => c.course)).size;
 
   return (
     <View style={styles.screen}>
@@ -80,7 +106,7 @@ export function AsistenHome() {
 
         <View style={styles.body}>
           <View style={styles.inner}>
-            {/* Ringkasan */}
+            {/* Ringkasan (Stats) */}
             <View style={styles.summary}>
               <View style={styles.summaryItem}>
                 <View style={styles.summaryIcon}>
@@ -92,7 +118,7 @@ export function AsistenHome() {
                 <View style={styles.summaryIcon}>
                   <Ionicons name="people-outline" size={18} color={authColors.navy} />
                 </View>
-                <Text style={styles.summaryText}>{dummyRoster.length} Praktikan</Text>
+                <Text style={styles.summaryText}>{totalPraktikan} Praktikan</Text>
               </View>
             </View>
 
@@ -105,26 +131,31 @@ export function AsistenHome() {
               </View>
               <View>
                 <Text style={styles.dateTitle}>{todayLabel()}</Text>
-                <Text style={styles.dateSub}>{sessions.length} sesi terjadwal</Text>
+                <Text style={styles.dateSub}>{classes.length} sesi terjadwal</Text>
               </View>
             </View>
 
-            {/* Daftar sesi */}
-            {sessions.length === 0 ? (
+            {/* Daftar Kelas dari Firebase */}
+            {loading ? (
+              <ActivityIndicator size="large" color={authColors.navy} style={{ marginTop: 20 }} />
+            ) : classes.length === 0 ? (
               <StateView
                 kind="empty"
                 title="Belum ada jadwal praktikum"
                 message="Sesi yang kamu buat akan muncul di sini."
               />
             ) : (
-              sessions.map((s) => {
-                const st = STATUS[s.status];
-                const present = getAttendances(s.id).length;
+              classes.map((c) => {
+                // Cek status otomatis pakai utility jam GMT+7
+                const statusType = getSessionStatus(c); 
+                const st = STATUS_UI[statusType];
+                const participantCount = c.participants?.length || 0;
+
                 return (
                   <Pressable
-                    key={s.id}
+                    key={c.id}
                     style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
-                    onPress={() => router.push(`/sessions/${s.id}` as any)}
+                    onPress={() => router.push(`/detail-sesi?id=${c.id}` as any)}
                   >
                     <View style={[styles.chip, { backgroundColor: st.bg }]}>
                       <View style={[styles.chipDot, { backgroundColor: st.dot }]} />
@@ -133,14 +164,14 @@ export function AsistenHome() {
 
                     <View style={styles.cardTop}>
                       <View style={styles.cardAvatar}>
-                        <Text style={styles.cardAvatarText}>{initials(s.courseName)}</Text>
+                        <Text style={styles.cardAvatarText}>{initials(c.course || '')}</Text>
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.cardTitle} numberOfLines={2}>
-                          {s.courseName}
+                          {c.course}
                         </Text>
                         <Text style={styles.cardSub}>
-                          {s.kelas} · {s.room}
+                          {c.name} · {c.room}
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={22} color={authColors.ink} />
@@ -152,13 +183,12 @@ export function AsistenHome() {
                       <View style={styles.timeRow}>
                         <Ionicons name="time-outline" size={14} color={authColors.muted} />
                         <Text style={styles.timeText}>
-                          {formatDate(s.date)} · {s.startTime.replace(':', '.')} -{' '}
-                          {s.endTime.replace(':', '.')}
+                          {c.dateLabel || 'Tanggal belum diatur'} · {c.timeStart || '--'} - {c.timeEnd || '--'}
                         </Text>
                       </View>
-                      {present > 0 ? (
+                      {participantCount > 0 ? (
                         <Text style={styles.presentText}>
-                          <Text style={styles.presentNumber}>{present}</Text> Praktikan Hadir
+                          <Text style={styles.presentNumber}>{participantCount}</Text> Praktikan
                         </Text>
                       ) : null}
                     </View>
