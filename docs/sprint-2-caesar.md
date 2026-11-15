@@ -1,28 +1,17 @@
 # Sprint 2 — Caesar
 
-Pembaruan alur sesi (15 November 2026): branch `feature/session-attendance-and-permissions`, berdasarkan `main` commit `14d5c4c` setelah merge tim. Branch awal Sprint 2: `feature/caesar-sprint-2`.
+Branch: `feature/caesar-sprint-2`, berdasarkan `origin/main` commit `67b3d01` (sudah mencakup autentikasi dan kelas Dinda).
 
 ## Implementasi
 
 - SRS-05: transaksi Firestore, status sesi dicek ulang di server, ID deterministik, waktu server, modal sukses setelah commit berhasil.
 - SRS-06: listener presensi akun sendiri, ringkasan sesi disimpan bersama presensi sehingga riwayat tetap terbaca walaupun sesi dihapus.
-- SRS-18: pengajuan izin di dalam detail sesi peserta, alasan trim 10–1.000 karakter, status awal `pending`, konfirmasi sukses setelah commit Firestore.
+- SRS-18: tab Izin, pilihan sesi peserta, alasan trim 10–1.000 karakter, status awal `pending`, konfirmasi sukses setelah commit.
 - SRS-19: riwayat izin pada tab Riwayat; keputusan dan hasil AI diperbarui melalui listener; AI pending/gagal tidak menghapus pengajuan.
 - SRS-20: rules membatasi UID pemilik, peserta sesi, status sesi, timestamp server, create-only, serta perubahan keputusan/AI hanya oleh asisten.
 - SRS-21: loading, empty state, error + retry listener, indikator cache, tombol submit terkunci selama operasi dan ketika sesi belum tersinkron.
 
-Login/registrasi/logout tetap memakai implementasi Dinda. Home dan detail sesi praktikan kini memakai listener `sessions` yang sama dengan presensi/izin, bukan ID dokumen `classes` atau status yang dihitung otomatis dari jam. Riwayat memakai snapshot sesi pada dokumen presensi; tidak lagi mencari sesi dari data dummy. Service, rules, dan worker AI tidak diubah pada pembaruan alur ini.
-
-## Alur sesi praktikan
-
-1. **Home → pilih sesi → detail sesi.** Hanya sesi dengan UID akun pada `participantIds` yang muncul. Pencarian dapat memakai nama praktikum, kelas, atau ruangan.
-2. **Isi presensi** tersedia saat `open`: konfirmasi melalui modal, transaksi Firestore, lalu modal sukses setelah penyimpanan berhasil. Tidak menggunakan simulasi `setTimeout`.
-3. **Ajukan izin** membuka form langsung di detail sesi yang sama. Pengguna tidak perlu memilih sesi lagi. Tersedia pada sesi `upcoming`/`open`; input tidak valid tetap berada pada form.
-4. Setelah presensi atau izin tercatat, kedua tindakan tidak ditawarkan lagi untuk sesi tersebut. Link Riwayat menampilkan presensi, status keputusan izin, serta informasi AI.
-5. Ketika asisten menutup sesi, kedua tombol dinonaktifkan dan form izin tidak ditampilkan. Transaksi juga mengecek ulang status server, sehingga perubahan saat pengguna sedang mengisi form tidak melewati pembatasan.
-6. Tab khusus **Izin** dihapus. Link lama `/presensi` menuju Home; `/izin` menuju Home, atau menuju detail sesi/form izin jika memiliki parameter `id`. Akses asisten ke detail praktikan dialihkan ke pengelolaan jadwal asisten yang sudah ada; ID kelas dari Home asisten tidak dianggap ID sesi.
-
-Tampilan navy/putih tim dipertahankan. Detail tetap berupa kartu sesi dengan tombol presensi utama dan izin sekunder, layout dibatasi lebarnya pada web, dan form dapat digulir saat keyboard terbuka. Tidak ada dependency native baru atau perubahan konfigurasi build.
+Login/registrasi/logout tetap memakai implementasi Dinda. Halaman jadwal/detail dan fitur asisten yang masih memakai dummy merupakan bagian integrasi Dinda/Fadhil, bukan sumber data halaman Caesar.
 
 Output web menggunakan `single` (aplikasi client/SPA) karena baseline `server` menghasilkan `Requiring unknown module` pada SSR ketika URL riwayat di-reload. Aplikasi ini menggunakan Firebase client dan tidak memiliki API routes/SSR yang diperlukan. Pengaturan native tetap sama. Hosting web nantinya perlu fallback route ke `index.html`.
 
@@ -108,16 +97,14 @@ npx --yes firebase-tools@14.27.0 emulators:exec --project demo-hadirin --only fi
 
 Java 21 diperlukan untuk emulator. Tests menggunakan project `demo-hadirin` dan tidak membutuhkan akun Firebase atau izin EAS. Mencakup service asli, klik bersamaan, UID palsu, duplikasi, sesi tertutup, input invalid, pemisahan akun, izin/kehadiran yang saling eksklusif, kegagalan AI, dan listener keputusan asisten.
 
-Verifikasi pembaruan alur sesi: 17/17 pengujian Firestore lulus; lint dan TypeScript lulus. Pengujian UI emulator mencakup pemilihan sesi asli (bukan kelas), presensi/konfirmasi, pencegahan duplikasi setelah reload, validasi dan pengiriman izin dari detail sesi, riwayat dari snapshot Firestore, keputusan asisten/AI gagal secara real-time, link lama, sesi tidak ditemukan, serta sesi ditutup saat form izin sedang diisi. Tampilan web diperiksa pada 320×740, 390×844, dan 1280×900. Belum dilakukan pengujian pada HP fisik atau API AI pengajar; simulasi keputusan/AI menggunakan fixture emulator, bukan API produksi.
-
-Ekspor bundle Android juga berhasil (`npx expo export --platform android --output-dir .expo/session-flow-android`). Ini pemeriksaan bundling JavaScript/native assets, bukan pembuatan APK atau pengujian pada perangkat fisik.
+Hasil verifikasi implementasi: 13/13 pengujian Firestore lulus; lint dan TypeScript lulus; pengujian UI emulator login → presensi → izin → riwayat → reload/persistensi lulus; ekspor bundle Android berhasil. Tampilan web diperiksa pada 390×844 dan 1280×900. Kontras teks sekunder, error, dan peringatan mode terang diperkuat menggunakan token yang sama; identitas warna dan mode gelap tetap dipertahankan. Belum dilakukan pengujian pada HP fisik atau API AI pengajar.
 
 Untuk uji UI web lokal (Chromium + Python Playwright terpasang):
 
 1. `npx --yes firebase-tools@14.27.0 emulators:start --project demo-hadirin --only auth,firestore`
-2. `node tests/seed-practitioner.mjs` pada emulator lokal. Perintah ini menghapus data **project emulator `demo-hadirin`** dan mengisinya kembali; tidak mengakses project tim. Membuat akun `caesar@example.test` / `test-pass-123`, empat sesi dengan status berbeda, serta satu kelas yang bukan sesi.
+2. `node tests/seed-practitioner.mjs` pada emulator yang baru dimulai (akun seed dibuat sekali).
 3. Gunakan konfigurasi lokal sementara: API key `test-key`, project ID `demo-hadirin`, app ID `test-app`, `EXPO_PUBLIC_FIREBASE_EMULATORS=true` dan host `127.0.0.1`.
-4. `npx expo start --web --port 8097`, lalu `python tests/practitioner-ui.py`. Script menggunakan Chrome di lokasi default Windows, override `CHROME_PATH`, atau Chromium Playwright jika tersedia. Screenshot lokal disimpan di `.impeccable/review/` (tidak di-commit). Jalankan uji UI dan uji rules secara bergantian karena keduanya memakai/mengganti fixture emulator yang sama.
+4. `npx expo start --web --port 8097`, lalu `python tests/practitioner-ui.py`.
 5. Kembalikan env ke Firebase tim dan matikan flag emulator sebelum pengujian perangkat nyata. Untuk Android fisik, host emulator harus IP LAN laptop; diperlukan akses jaringan yang sesuai.
 
 Uji perangkat nyata dan API pengajar tetap memerlukan konfigurasi Firebase tim, deployment rules, sesi Firestore Fadhil, worker AI, serta development build yang sesuai. Uji emulator bukan bukti bahwa API AI pengajar sudah terintegrasi.

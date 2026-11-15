@@ -48,6 +48,9 @@ export default function AppTabs() {
               <TabTrigger name="explore" href="/explore" asChild>
                 <TabButton icon="clipboard" label="Riwayat" />
               </TabTrigger>
+              <TabTrigger name="izin" href="/izin" asChild>
+                <TabButton icon="document-text" label="Izin" />
+              </TabTrigger>
             </>
           )}
 
