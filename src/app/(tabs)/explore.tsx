@@ -5,8 +5,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { authColors } from '@/components/auth-ui';
+import { DataState, PractitionerScreen, ui } from '@/components/practitioner-ui';
+import { PermissionHistory } from '@/components/permission-history';
+import { useAttendanceTheme } from '@/constants/attendance-theme';
 import { StateView } from '@/components/state-view';
-import { BottomTabInset } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth } from '@/constants/theme';
 import { useApp } from '@/context/app-context';
 import { useAttendance } from '@/context/attendance-context';
 import { practiceSessions } from '@/data/dummy-attendance';

@@ -299,7 +299,7 @@ export default function KelasScreen() {
                 </View>
                 <Text style={styles.stateTitle}>Belum ada kelas</Text>
                 <Text style={styles.stateText}>
-                  Tekan "Tambah Kelas" untuk membuat kelas pertama.
+                  Tekan &quot;Tambah Kelas&quot; untuk membuat kelas pertama.
                 </Text>
               </View>
             ) : (

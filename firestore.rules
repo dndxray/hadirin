@@ -26,5 +26,76 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create, update, delete: if isAsisten();
     }
+
+    function isPraktikan() {
+      return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'praktikan';
+    }
+    function sessionData(id) {
+      return get(/databases/$(database)/documents/sessions/$(id)).data;
+    }
+    function participant(id) {
+      return isPraktikan() && request.auth.uid in sessionData(id).participantIds;
+    }
+    function validSummary(data) {
+      let s = sessionData(data.sessionId);
+      return data.session == {
+        'courseName': s.courseName, 'className': s.className,
+        'dateLabel': s.dateLabel, 'timeRange': s.timeRange,
+        'room': s.room, 'assistantName': s.assistantName
+      };
+    }
+    // SRS-15 integration boundary: participantIds contains Firebase UIDs.
+    match /sessions/{id} {
+      allow read: if isAsisten() || (isPraktikan() && request.auth.uid in resource.data.participantIds);
+      allow create, update, delete: if isAsisten();
+    }
+    match /attendance/{id} {
+      // Transactions also read the currently missing canonical document.
+      allow get: if isAsisten() || (isPraktikan() &&
+        (!exists(/databases/$(database)/documents/attendance/$(id)) || resource.data.practitionerId == request.auth.uid));
+      allow list: if isAsisten() || (isPraktikan() && resource.data.practitionerId == request.auth.uid);
+      allow create: if isPraktikan()
+        && request.resource.data.keys().hasOnly(['sessionId', 'practitionerId', 'checkedInAt', 'session'])
+        && request.resource.data.practitionerId == request.auth.uid
+        && id == request.resource.data.sessionId + '_' + request.auth.uid
+        && participant(request.resource.data.sessionId)
+        && sessionData(request.resource.data.sessionId).status == 'open'
+        && request.resource.data.checkedInAt == request.time
+        && validSummary(request.resource.data)
+        && !existsAfter(/databases/$(database)/documents/permissionRequests/$(id));
+      allow update, delete: if false;
+    }
+    match /permissionRequests/{id} {
+      allow get: if isAsisten() || (isPraktikan() &&
+        (!exists(/databases/$(database)/documents/permissionRequests/$(id)) || resource.data.practitionerId == request.auth.uid));
+      allow list: if isAsisten() || (isPraktikan() && resource.data.practitionerId == request.auth.uid);
+      allow create: if isPraktikan()
+        && request.resource.data.keys().hasOnly(['sessionId', 'practitionerId', 'reason', 'status', 'createdAt', 'session', 'ai'])
+        && request.resource.data.practitionerId == request.auth.uid
+        && id == request.resource.data.sessionId + '_' + request.auth.uid
+        && participant(request.resource.data.sessionId)
+        && sessionData(request.resource.data.sessionId).status in ['open', 'upcoming']
+        && request.resource.data.reason is string
+        && request.resource.data.reason.trim().size() >= 10 && request.resource.data.reason.size() <= 1000
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.ai == {'status': 'pending'}
+        && validSummary(request.resource.data)
+        && !existsAfter(/databases/$(database)/documents/attendance/$(id));
+      // SRS-14/16: assistant or trusted Admin SDK worker handles classification.
+      // AI updates cannot modify decisions; decision updates require assistant UID/time.
+      allow update: if isAsisten() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ai'])
+          && request.resource.data.ai.keys().hasOnly(['status', 'category', 'error'])
+          && request.resource.data.ai.status in ['success', 'failed']
+          && (request.resource.data.ai.status != 'success' || request.resource.data.ai.category is string))
+        || (resource.data.status == 'pending'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decisionNote', 'decidedBy', 'decidedAt'])
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.decidedBy == request.auth.uid
+          && request.resource.data.decidedAt == request.time)
+      );
+      allow delete: if false;
+    }
   }
 }

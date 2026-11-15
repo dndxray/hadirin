@@ -10,6 +10,7 @@ type AttendanceConfirmationModalProps = {
   phase: AttendanceModalPhase;
   session: PracticeSession;
   attendanceTime?: string;
+  busy?: boolean;
   onClose: () => void;
   onConfirm: () => void;
   onViewHistory: () => void;
@@ -18,6 +19,7 @@ type AttendanceConfirmationModalProps = {
 export function AttendanceConfirmationModal({
   phase,
   attendanceTime,
+  busy = false,
   onClose,
   onConfirm,
   onViewHistory,
@@ -37,7 +39,7 @@ export function AttendanceConfirmationModal({
   const message = isConfirm
     ? 'Apakah Anda yakin ingin melakukan presensi?'
     : isSuccess
-      ? `Kehadiranmu tercatat pada ${attendanceTime ?? 'waktu sekarang'}.`
+      ? attendanceTime ? `Kehadiranmu tercatat pada ${attendanceTime}.` : 'Kehadiran tersimpan. Waktu server akan muncul di riwayat.'
       : phase === 'duplicate'
         ? 'Kamu hanya dapat melakukan presensi satu kali untuk sesi ini.'
         : 'Presensi hanya dapat dilakukan ketika asisten membuka sesi.';

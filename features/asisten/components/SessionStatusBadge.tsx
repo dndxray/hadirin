@@ -8,20 +8,38 @@ interface SessionStatusBadgeProps {
 }
 
 const STATUS_CONFIG: Record<
-  SessionStatus,
+  string,
   { label: string; bg: string; text: string; dot: string }
 > = {
+  upcoming: {
+    label: 'Belum Dibuka',
+    bg: '#F3F4F6',
+    text: '#4B5563',
+    dot: theme.colors.gray,
+  },
   CLOSED: {
     label: 'Belum Dibuka',
     bg: '#F3F4F6',
     text: '#4B5563',
     dot: theme.colors.gray,
   },
+  open: {
+    label: 'Sedang Berlangsung',
+    bg: '#ECFDF5',
+    text: '#065F46',
+    dot: theme.colors.green,
+  },
   OPEN: {
     label: 'Sedang Berlangsung',
     bg: '#ECFDF5',
     text: '#065F46',
     dot: theme.colors.green,
+  },
+  closed: {
+    label: 'Sudah Ditutup',
+    bg: '#FEF2F2',
+    text: '#991B1B',
+    dot: theme.colors.red,
   },
   ENDED: {
     label: 'Sudah Ditutup',
@@ -32,7 +50,7 @@ const STATUS_CONFIG: Record<
 };
 
 export function SessionStatusBadge({ status }: SessionStatusBadgeProps) {
-  const config = STATUS_CONFIG[status];
+  const config = STATUS_CONFIG[status] || STATUS_CONFIG.upcoming;
 
   return (
     <View style={[styles.badge, { backgroundColor: config.bg }]}>

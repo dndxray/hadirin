@@ -11,14 +11,17 @@ interface SessionCardProps {
 }
 
 export function SessionCard({ session, onPress }: SessionCardProps) {
-  const displayDate = formatDate(session.date);
+  const displayDate = session.dateLabel || formatDate(session.date || '');
+  const displayTime =
+    session.timeRange || `${session.startTime || ''} - ${session.endTime || ''}`;
+  const displayKelas = session.className || session.kelas;
 
   return (
     <Pressable style={styles.card} onPress={onPress}>
       <View style={styles.header}>
         <View style={styles.titleSection}>
           <Text style={styles.courseName}>{session.courseName}</Text>
-          <Text style={styles.kelas}>Kelas {session.kelas}</Text>
+          <Text style={styles.kelas}>Kelas {displayKelas}</Text>
         </View>
         <SessionStatusBadge status={session.status} />
       </View>
@@ -30,9 +33,7 @@ export function SessionCard({ session, onPress }: SessionCardProps) {
         </View>
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>⏰</Text>
-          <Text style={styles.detailValue}>
-            {session.startTime} - {session.endTime}
-          </Text>
+          <Text style={styles.detailValue}>{displayTime}</Text>
         </View>
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>📍</Text>

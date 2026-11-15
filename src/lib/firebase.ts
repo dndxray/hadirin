@@ -2,11 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
   getAuth,
+  connectAuthEmulator,
   getReactNativePersistence,
   initializeAuth,
   type Auth,
 } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
 import { Platform } from 'react-native';
 
 const firebaseConfig = {
@@ -31,5 +32,12 @@ if (Platform.OS === 'web' || !isNewApp) {
 }
 
 const db = getFirestore(app);
+
+// Explicit opt-in for local integration tests; production never uses emulators.
+if (__DEV__ && isNewApp && process.env.EXPO_PUBLIC_FIREBASE_EMULATORS === 'true') {
+  const host = process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST || '127.0.0.1';
+  connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true });
+  connectFirestoreEmulator(db, host, 8085);
+}
 
 export { app, auth, db };

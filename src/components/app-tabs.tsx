@@ -23,6 +23,11 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="izin" hidden={isAsisten}>
+        <NativeTabs.Trigger.Label>Izin</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="doc.text" md="description" />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="explore" hidden={isAsisten}>
         <NativeTabs.Trigger.Label>Riwayat</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
