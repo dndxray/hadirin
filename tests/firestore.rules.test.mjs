@@ -13,13 +13,15 @@ const attendance = (uid = 'caesar', sessionId = 'open') => ({ sessionId, practit
 const permission = (uid = 'caesar', sessionId = 'open') => ({ sessionId, practitionerId: uid, createdAt: serverTimestamp(), session, reason: 'Saya sedang sakit dan perlu beristirahat.', status: 'pending', ai: { status: 'pending' } });
 const db = (uid = 'caesar') => env.authenticatedContext(uid).firestore();
 const require = createRequire(import.meta.url);
-function service(store, uid = 'caesar') {
-  const output = ts.transpileModule(readFileSync('src/services/practitioner-service.ts', 'utf8'), {
+function service(store, uid = 'caesar', source = 'src/services/practitioner-service.ts') {
+  const output = ts.transpileModule(readFileSync(source, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const module = { exports: {} };
   new Function('require', 'exports', 'module', output)(
-    (name) => name === '@/lib/firebase' ? { db: store, auth: { currentUser: { uid } } } : name === 'firebase/firestore' ? firestore : require(name),
+    (name) => name === '@/lib/firebase' ? { db: store, auth: { currentUser: { uid } } }
+      : name === '@/utils/nim' ? service(store, uid, 'src/utils/nim.ts')
+      : name === 'firebase/firestore' ? firestore : require(name),
     module.exports, module,
   );
   return module.exports;
@@ -36,6 +38,86 @@ beforeEach(async () => {
   });
 });
 after(async () => { await env?.cleanup(); });
+
+const enrollment = (uid = 'assistant') => service(db(uid), uid, 'src/services/enrollment-service.ts');
+
+test('akun lama melengkapi NIM string sekali; angka nol awal dipertahankan', async () => {
+  const api = enrollment('caesar');
+  assert.equal(await api.saveOwnNim(' 00123456789 '), '00123456789');
+  assert.equal((await getDoc(doc(db(), 'users', 'caesar'))).data().nim, '00123456789');
+  assert.equal(await api.saveOwnNim('00123456789'), '00123456789');
+  await assert.rejects(api.saveOwnNim('987654321'));
+  await assert.rejects(api.saveOwnNim('  '));
+});
+
+test('rules menolak NIM angka, perubahan NIM tersimpan, serta perubahan profil orang lain', async () => {
+  const own = doc(db(), 'users', 'caesar');
+  await assertFails(updateDoc(own, { nim: 123456789 }));
+  await assertSucceeds(updateDoc(own, { nim: '123456789' }));
+  await assertFails(updateDoc(own, { nim: '987654321' }));
+  await assertFails(updateDoc(own, { nim: firestore.deleteField() }));
+  await assertFails(updateDoc(doc(db('other'), 'users', 'caesar'), { nim: '111222333' }));
+  await assertSucceeds(updateDoc(own, { name: 'Caesar' }));
+  await assertFails(updateDoc(own, { role: 'asisten' }));
+});
+
+test('asisten menambah peserta dari NIM ke UID pada sesi lama, lalu praktikan bisa presensi', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users', 'caesar'), { nim: '123456789', name: 'Caesar' });
+    await setDoc(doc(context.firestore(), 'sessions', 'legacy-nim'), { ...session, status: 'open' });
+  });
+  const api = enrollment();
+  assert.equal((await api.findPractitionerByNim('123456789')).uid, 'caesar');
+  assert.equal((await api.enrollPractitionerByNim('legacy-nim', '123456789', 'caesar')).alreadyEnrolled, false);
+  assert.equal((await api.enrollPractitionerByNim('legacy-nim', '123456789', 'caesar')).alreadyEnrolled, true);
+  assert.deepEqual((await getDoc(doc(db(), 'sessions', 'legacy-nim'))).data().participantIds, ['caesar']);
+  await assertSucceeds(service(db()).recordParticipation('legacy-nim'));
+});
+
+test('pencarian NIM ganda dan NIM tidak terdaftar tidak memilih akun secara diam-diam', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await Promise.all(['caesar', 'other'].map((uid) => updateDoc(doc(context.firestore(), 'users', uid), { nim: '123456789' })));
+  });
+  await assert.rejects(enrollment().findPractitionerByNim('123456789'), /beberapa akun/);
+  await assert.rejects(enrollment().findPractitionerByNim('000000000'), /belum ditemukan/);
+});
+
+test('praktikan tidak dapat mencari direktori NIM atau mendaftarkan dirinya ke sesi', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users', 'caesar'), { nim: '123456789' });
+  });
+  await assert.rejects(enrollment('caesar').findPractitionerByNim('123456789'));
+  await assertFails(updateDoc(doc(db(), 'sessions', 'open'), { participantIds: ['caesar'] }));
+});
+
+test('pendaftaran dua NIM bersamaan tidak menimpa peserta sebelumnya', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users', 'caesar'), { nim: '123456789' });
+    await updateDoc(doc(context.firestore(), 'users', 'other'), { nim: '987654321' });
+    await setDoc(doc(context.firestore(), 'sessions', 'legacy-nim'), { ...session, status: 'open' });
+  });
+  const api = enrollment();
+  await Promise.all([
+    api.enrollPractitionerByNim('legacy-nim', '123456789', 'caesar'),
+    api.enrollPractitionerByNim('legacy-nim', '987654321', 'other'),
+  ]);
+  assert.deepEqual((await getDoc(doc(db(), 'sessions', 'legacy-nim'))).data().participantIds.sort(), ['caesar', 'other']);
+});
+
+test('sesi lama tanpa participantIds tidak muncul, query peserta tetap sah', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'sessions', 'legacy'), { ...session, status: 'open' });
+  });
+  const own = await assertSucceeds(getDocs(query(collection(db(), 'sessions'), where('participantIds', 'array-contains', 'caesar'))));
+  assert.equal(own.size, 3);
+  assert.equal(own.docs.some((item) => item.id === 'legacy'), false);
+  const empty = await assertSucceeds(getDocs(query(collection(db('outsider'), 'sessions'), where('participantIds', 'array-contains', 'outsider'))));
+  assert.equal(empty.size, 0);
+});
+
+test('UID tanpa profil pengguna ditolak meskipun autentikasi ada', async () => {
+  await assertFails(getDocs(query(collection(db('missing-profile'), 'sessions'), where('participantIds', 'array-contains', 'missing-profile'))));
+});
 
 test('praktikan menyimpan presensi; server memberi timestamp', async () => {
   const ref = doc(db(), 'attendance', 'open_caesar');

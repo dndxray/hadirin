@@ -1,5 +1,7 @@
 # Koreksi navigasi izin
 
+Catatan: dokumen ini mencatat pemulihan baseline. Pengembangan terbaru yang diminta setelah akses Console tersedia—UI Riwayat, NIM, pendaftaran peserta, dan transaksi presensi—dijelaskan di [firebase-nim-setup.md](firebase-nim-setup.md). Home tetap berbasis kelas; status/penyimpanan detail serta riwayat kini memakai Firestore, bukan simulasi/dummy.
+
 Acuan pemulihan: commit `14d5c4c`, sebelum perubahan alur pada branch Caesar.
 
 - Home kembali memakai koleksi `classes`, tampilan, dan alur baseline.

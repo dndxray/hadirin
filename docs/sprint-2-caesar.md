@@ -1,5 +1,7 @@
 # Sprint 2 — Caesar
 
+Pembaruan terbaru (NIM, UI Riwayat, izin dalam detail, dan koreksi integrasi Firebase): lihat [firebase-nim-setup.md](firebase-nim-setup.md). Bagian berikut adalah catatan implementasi awal; perintah uji UI terbaru ada pada dokumen pembaruan.
+
 Branch: `feature/caesar-sprint-2`, berdasarkan `origin/main` commit `67b3d01` (sudah mencakup autentikasi dan kelas Dinda).
 
 ## Implementasi

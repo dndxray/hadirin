@@ -1,5 +1,6 @@
 """Use local Expo :8097 and seed-restored-navigation.mjs; never production data."""
 import os
+from urllib.parse import urlsplit
 from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 
@@ -35,17 +36,18 @@ with sync_playwright() as playwright:
         page.screenshot(path=str(OUTPUT / 'restored-home-phone.png'), full_page=True)
         text('Penambangan Data').click()
         expect(page).to_have_url(f'{BASE}/detail-sesi?id=penambangan-data')
-        for label in ['Sesi Praktikum B', 'Mulai', 'Selesai', '10.20', '12.10', 'Fadhil', 'Cesar', 'Sesi Ditutup']:
+        for label in ['Sesi Praktikum B', 'Mulai', 'Selesai', '10.20', '12.10', 'Fadhil', 'Cesar', 'Sesi Belum Tersedia']:
             expect(text(label)).to_be_visible()
         page.screenshot(path=str(OUTPUT / 'restored-detail-phone.png'), full_page=True)
         page.get_by_role('button', name='Ajukan Izin', exact=True).click()
-        expect(page).to_have_url(f'{BASE}/izin')
         expect(text('Pengajuan izin')).to_be_visible()
+        assert urlsplit(page.url).path == '/izin'
         expect(page.get_by_label('Alasan ketidakhadiran', exact=True)).to_be_visible()
         page.get_by_role('button', name='Kembali ke sesi', exact=True).click()
         expect(text('Sesi Praktikum B')).to_be_visible()
         page.goto(f'{BASE}/explore', wait_until='domcontentloaded')
-        for label in ['Riwayat Kehadiran', '0%', 'Tingkat Kehadiran', '0', 'Total Hadir', 'Belum ada presensi', 'Lihat Sesi']:
+        expect(text('0')).to_be_visible()
+        for label in ['Riwayat Kehadiran', '—', 'Tingkat Kehadiran', '0', 'Total Hadir', 'Belum ada presensi', 'Lihat Sesi']:
             expect(text(label)).to_be_visible()
         expect(text('Izin')).to_have_count(0)
         expect(text('Terjadi kesalahan')).to_have_count(0)
