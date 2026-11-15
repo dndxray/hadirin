@@ -39,8 +39,8 @@ with sync_playwright() as playwright:
         page.get_by_role('button', name='Ajukan Izin', exact=True).click()
         expect(text('Pengajuan izin')).to_be_visible()
         # The original form now restricts choices to the class opened in detail.
-        expect(page.get_by_role('button', name='Basis Data', exact=False)).to_have_count(0)
-        page.get_by_role('button', name='Penambangan Data', exact=False).click()
+        expect(page.get_by_role('radio', name='Basis Data', exact=False)).to_have_count(0)
+        page.get_by_role('radio', name='Penambangan Data', exact=False).click()
         page.get_by_label('Alasan ketidakhadiran', exact=True).fill('Saya sedang sakit dan perlu beristirahat sesuai anjuran dokter.')
         page.get_by_role('button', name='Kirim pengajuan izin', exact=True).click()
         expect(text('Izin berhasil diajukan')).to_be_visible()
