@@ -19,19 +19,23 @@ import {
 
 import { auth, db } from '@/lib/firebase';
 import type { Role } from '@/types/attendance';
+import { saveOwnNim } from '@/services/enrollment-service';
+import { normalizeNim, validateNim } from '@/utils/nim';
 
 export type Profile = {
   uid: string;
   name: string;
   email: string;
   role: Role;
+  nim?: string;
 };
 
 type AuthContextValue = {
   firebaseUser: User | null;
   profile: Profile | null;
   loading: boolean;
-  register: (name: string, email: string, password: string, role: Role) => Promise<Profile>;
+  register: (name: string, email: string, password: string, role: Role, nim?: string) => Promise<Profile>;
+  saveNim: (nim: string) => Promise<void>;
   login: (email: string, password: string) => Promise<Profile>;
   logout: () => Promise<void>;
 };
@@ -42,7 +46,7 @@ async function fetchProfile(uid: string): Promise<Profile | null> {
   const snap = await getDoc(doc(db, 'users', uid));
   if (!snap.exists()) return null;
   const d = snap.data();
-  return { uid, name: d.name, email: d.email, role: d.role };
+  return { uid, name: d.name, email: d.email, role: d.role, ...(typeof d.nim === 'string' ? { nim: d.nim } : {}) };
 }
 
 export function authErrorMessage(error: unknown): string {
@@ -94,11 +98,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const register = useCallback(
-    async (name: string, email: string, password: string, role: Role) => {
+    async (name: string, email: string, password: string, role: Role, nim?: string) => {
+      if (role === 'praktikan') {
+        const invalid = validateNim(nim ?? '');
+        if (invalid) throw new Error(invalid);
+      }
       registering.current = true;
       try {
         const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        const data = { name: name.trim(), email: email.trim(), role };
+        const data = { name: name.trim(), email: email.trim(), role, ...(role === 'praktikan' ? { nim: normalizeNim(nim!) } : {}) };
         await setDoc(doc(db, 'users', cred.user.uid), {
           ...data,
           createdAt: serverTimestamp(),
@@ -130,9 +138,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setProfile(null);
   }, []);
 
+  const saveNim = useCallback(async (value: string) => {
+    const uid = auth.currentUser?.uid;
+    const nim = await saveOwnNim(value);
+    setProfile((current) => current && current.uid === uid ? { ...current, nim } : current);
+  }, []);
+
   const value = useMemo(
-    () => ({ firebaseUser, profile, loading, register, login, logout }),
-    [firebaseUser, profile, loading, register, login, logout],
+    () => ({ firebaseUser, profile, loading, register, login, logout, saveNim }),
+    [firebaseUser, profile, loading, register, login, logout, saveNim],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
