@@ -14,7 +14,7 @@ import { authErrorMessage, useAuth } from '@/context/auth-context';
 
 export default function LoginScreen() {
   const { login } = useAuth();
-  const { login: setDummyUser } = useApp(); // sementara, sampai SRS-08
+  const { login: setDummyUser } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +31,12 @@ export default function LoginScreen() {
     try {
       const p = await login(email, password);
       setDummyUser(p.role);
-            router.replace('/home');
+      
+      if (p.role === 'asisten' && p.approvalStatus === 'pending') {
+        router.replace('/pending');
+      } else {
+        router.replace('/home');
+      }
     } catch (e) {
       setError(
         e instanceof Error && !('code' in e) ? e.message : authErrorMessage(e),

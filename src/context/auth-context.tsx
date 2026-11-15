@@ -28,6 +28,7 @@ export type Profile = {
   email: string;
   role: Role;
   nim?: string;
+  approvalStatus?: 'pending' | 'approved';
 };
 
 type AuthContextValue = {
@@ -46,11 +47,22 @@ async function fetchProfile(uid: string): Promise<Profile | null> {
   const snap = await getDoc(doc(db, 'users', uid));
   if (!snap.exists()) return null;
   const d = snap.data();
-  return { uid, name: d.name, email: d.email, role: d.role, ...(typeof d.nim === 'string' ? { nim: d.nim } : {}) };
+  return {
+    uid,
+    name: d.name,
+    email: d.email,
+    role: d.role,
+    ...(typeof d.nim === 'string' ? { nim: d.nim } : {}),
+    ...(typeof d.approvalStatus === 'string' ? { approvalStatus: d.approvalStatus } : {}),
+  };
 }
 
 export function authErrorMessage(error: unknown): string {
   const code = (error as { code?: string })?.code ?? '';
+  const msg = (error as { message?: string })?.message ?? '';
+  
+  console.error("FIREBASE ERROR ASLI:", error);
+
   switch (code) {
     case 'auth/email-already-in-use':
       return 'Email sudah terdaftar. Silakan masuk.';
@@ -58,6 +70,10 @@ export function authErrorMessage(error: unknown): string {
       return 'Format email tidak valid.';
     case 'auth/weak-password':
       return 'Kata sandi terlalu lemah (minimal 6 karakter).';
+    case 'auth/operation-not-allowed':
+      return 'Metode Email/Password belum diaktifkan di Firebase.';
+    case 'permission-denied':
+      return `Gagal Firestore: ${msg}`;
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
     case 'auth/user-not-found':
@@ -67,7 +83,7 @@ export function authErrorMessage(error: unknown): string {
     case 'auth/network-request-failed':
       return 'Koneksi bermasalah. Periksa internetmu.';
     default:
-      return 'Terjadi kesalahan. Coba lagi.';
+      return `Error: ${code} - ${msg}`;
   }
 }
 
@@ -75,7 +91,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  // Saat registrasi, profil ditulis manual, jadi listener tidak boleh menimpanya.
   const registering = useRef(false);
 
   useEffect(() => {
@@ -106,11 +121,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
       registering.current = true;
       try {
         const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        const data = { name: name.trim(), email: email.trim(), role, ...(role === 'praktikan' ? { nim: normalizeNim(nim!) } : {}) };
+        
+        const data = {
+          name: name.trim(),
+          email: email.trim(),
+          role,
+          ...(role === 'praktikan' ? { nim: normalizeNim(nim!) } : {}),
+          approvalStatus: role === 'asisten' ? 'pending' : 'approved',
+        };
+        
         await setDoc(doc(db, 'users', cred.user.uid), {
           ...data,
           createdAt: serverTimestamp(),
         });
+        
         const created: Profile = { uid: cred.user.uid, ...data };
         setProfile(created);
         setLoading(false);

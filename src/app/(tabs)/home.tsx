@@ -11,39 +11,41 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 
-import { AsistenHome } from '@/components/asisten-home';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { getSessionStatus } from '@/utils/session-status'; // IMPORT UTILITY KITA
+import { getSessionStatus } from '@/utils/session-status';
+import { AsistenHome } from '@/components/asisten-home'; // IMPORT ASISTEN HOME
 
 export default function HomeScreen() {
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   
-  const [classes, setClasses] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchClasses = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'classes'));
-        const data = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setClasses(data);
-      } catch (error) {
-        console.error("Gagal load Firebase:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (profile?.role === 'asisten') return; // Jangan tarik data kalau yang login asisten
 
-    fetchClasses();
-  }, []);
+    const q = collection(db, 'sessions');
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setSessions(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Gagal load sesi:", error);
+      setLoading(false);
+    });
 
+    return () => unsubscribe();
+  }, [profile?.role]);
+
+  // ===== INI KUNCINYA =====
+  // Kalau yang login Asisten, lempar ke tampilan AsistenHome
   if (profile?.role === 'asisten') {
     return (
       <View style={{ flex: 1 }}>
@@ -51,6 +53,7 @@ export default function HomeScreen() {
       </View>
     );
   }
+  // ========================
 
   const getInitials = (name?: string) => {
     if (!name) return 'MK';
@@ -98,25 +101,23 @@ export default function HomeScreen() {
             <Ionicons name="calendar" size={20} color="#1B2A4E" />
           </View>
           <View>
-            <Text style={styles.dateText}>Daftar Mata Kuliah</Text>
-            <Text style={styles.dateSubText}>{classes.length} kelas terdaftar</Text>
+            <Text style={styles.dateText}>Jadwal Praktikum</Text>
+            <Text style={styles.dateSubText}>{sessions.length} sesi terdaftar</Text>
           </View>
         </View>
 
         {loading ? (
           <ActivityIndicator size="large" color="#1B2A4E" style={{ marginTop: 20 }} />
-        ) : classes.length === 0 ? (
+        ) : sessions.length === 0 ? (
           <Text style={{ textAlign: 'center', color: '#64748B', marginTop: 20 }}>
-            Belum ada data kelas di Firebase.
+            Belum ada jadwal praktikum.
           </Text>
         ) : (
-          classes.map((item) => {
-            // CEK STATUS OTOMATIS BERDASARKAN JAM GMT+7
+          sessions.map((item) => {
             const status = getSessionStatus(item);
             const isOpen = status === 'open';
             const isUpcoming = status === 'upcoming';
 
-            // Warna Badge
             let badgeBg = '#EEF1F6';
             let dotBg = '#94A3B8';
             let textColor = '#64748B';
@@ -136,11 +137,11 @@ export default function HomeScreen() {
               >
                 <View style={styles.sessionHeader}>
                   <View style={styles.sessionIconBg}>
-                    <Text style={styles.sessionIconText}>{getInitials(item.course)}</Text>
+                    <Text style={styles.sessionIconText}>{getInitials(item.courseName)}</Text>
                   </View>
                   <View style={styles.sessionInfo}>
-                    <Text style={styles.sessionTitle}>{item.course}</Text>
-                    <Text style={styles.sessionRoom}>{item.name} · {item.room}</Text>
+                    <Text style={styles.sessionTitle}>{item.courseName}</Text>
+                    <Text style={styles.sessionRoom}>{item.className} · {item.room}</Text>
                   </View>
                   <View style={styles.sessionRight}>
                     <View style={[styles.badge, { backgroundColor: badgeBg }]}>
@@ -153,7 +154,7 @@ export default function HomeScreen() {
                 <View style={styles.sessionFooter}>
                   <Ionicons name="time-outline" size={16} color="#94A3B8" />
                   <Text style={styles.sessionTime}>
-                    {item.timeStart || '--'} - {item.timeEnd || '--'}
+                    {item.dateLabel} · {item.timeRange || `${item.startTime} - ${item.endTime}`}
                   </Text>
                 </View>
               </Pressable>

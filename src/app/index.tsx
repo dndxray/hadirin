@@ -1,12 +1,14 @@
 import { Redirect } from 'expo-router';
-
 import { useAuth } from '@/context/auth-context';
 
 export default function Index() {
   const { profile, loading } = useAuth();
-
   if (loading) return null;
   if (!profile) return <Redirect href="/login" />;
 
-  return <Redirect href="/home" />;
+  if (profile.role === 'asisten' && profile.approvalStatus === 'pending') {
+    return <Redirect href="/pending" />;
+  }
+
+  return <Redirect href={profile.role === 'asisten' ? '/home' : '/presensi'} />;
 }

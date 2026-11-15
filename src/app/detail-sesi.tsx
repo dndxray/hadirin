@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -9,6 +9,10 @@ import { useAuth } from '@/context/auth-context';
 import { StateView } from '@/components/state-view';
 import { initials } from '@/utils/home-format';
 import { getSessionStatus } from '@/utils/session-status';
+// Import fungsi hapus & edit dari service temen lu
+import { deleteSession, updateSession } from '@/services/assistant-service';
+// Import modal form dari folder features
+import { SessionFormModal } from '../../features/asisten/components/SessionFormModal';
 
 export default function DetailSesiScreen() {
   const insets = useSafeAreaInsets();
@@ -22,6 +26,11 @@ export default function DetailSesiScreen() {
   const [loading, setLoading] = useState(true);
   const [manualStatus, setManualStatus] = useState<string | null>(null);
   const [loadingToggle, setLoadingToggle] = useState(false);
+  
+  // State buat Pop-up dan Form
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const isAsisten = profile?.role === 'asisten';
 
@@ -30,47 +39,48 @@ export default function DetailSesiScreen() {
     else router.replace('/home'); 
   };
 
-  useEffect(() => {
-    const fetchDetail = async () => {
-      if (!sessionId) {
-        setLoading(false);
-        return;
-      }
+  const fetchDetail = async () => {
+    if (!sessionId) {
+      setLoading(false);
+      return;
+    }
+    try {
+      let docSnap = null;
+      let collectionName = 'sessions';
+
       try {
-        let docSnap = null;
-        let collectionName = 'sessions';
-
-        try {
-          const docRef = doc(db, 'sessions', sessionId);
-          docSnap = await getDoc(docRef);
-        } catch (e) {
-          console.log('Bukan di sessions, ngecek classes...');
-        }
-
-        if (!docSnap || !docSnap.exists()) {
-          collectionName = 'classes';
-          const docRef = doc(db, 'classes', sessionId);
-          docSnap = await getDoc(docRef);
-        }
-        
-        if (docSnap && docSnap.exists()) {
-          const data = docSnap.data();
-          setKelas({ 
-            id: docSnap.id, 
-            _collection: collectionName,
-            ...data,
-            courseName: data.courseName || data.course || 'Mata Kuliah',
-            className: data.className || data.name || 'Kelas',
-            timeRange: data.timeRange || `${data.startTime || data.timeStart || '--'} - ${data.endTime || data.timeEnd || '--'}`,
-            assistantName: data.assistantName || 'Asisten Hadirin'
-          });
-        }
-      } catch (error) {
-        console.error("Error load detail:", error);
-      } finally {
-        setLoading(false);
+        const docRef = doc(db, 'sessions', sessionId);
+        docSnap = await getDoc(docRef);
+      } catch (e) {
+        console.log('Bukan di sessions, ngecek classes...');
       }
-    };
+
+      if (!docSnap || !docSnap.exists()) {
+        collectionName = 'classes';
+        const docRef = doc(db, 'classes', sessionId);
+        docSnap = await getDoc(docRef);
+      }
+      
+      if (docSnap && docSnap.exists()) {
+        const data = docSnap.data();
+        setKelas({ 
+          id: docSnap.id, 
+          _collection: collectionName,
+          ...data,
+          courseName: data.courseName || data.course || 'Mata Kuliah',
+          className: data.className || data.name || 'Kelas',
+          timeRange: data.timeRange || `${data.startTime || data.timeStart || '--'} - ${data.endTime || data.timeEnd || '--'}`,
+          assistantName: data.assistantName || 'Asisten Hadirin'
+        });
+      }
+    } catch (error) {
+      console.error("Error load detail:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchDetail();
   }, [sessionId]);
 
@@ -130,17 +140,12 @@ export default function DetailSesiScreen() {
       ? { label: 'Sesi belum dibuka', color: '#52627A', background: '#EEF1F6' }
       : { label: 'Sesi telah ditutup', color: '#B91C1C', background: '#FEE2E2' };
 
-  const handleToggleStatus = async () => {
-    if (!canToggle) return;
-    
+  const executeToggleStatus = async () => {
+    setShowConfirm(false);
     try {
       setLoadingToggle(true);
       const newStatus = currentStatus === 'open' ? 'closed' : 'open';
-      
-      await updateDoc(doc(db, kelas._collection, kelas.id), {
-        status: newStatus
-      });
-      
+      await updateDoc(doc(db, kelas._collection, kelas.id), { status: newStatus });
       setManualStatus(newStatus);
       alert(`Sesi berhasil di-${newStatus === 'open' ? 'buka' : 'tutup'}!`);
     } catch (error: any) {
@@ -148,6 +153,20 @@ export default function DetailSesiScreen() {
       alert(error.message || "Gagal mengubah status sesi.");
     } finally {
       setLoadingToggle(false);
+    }
+  };
+
+  const executeDelete = async () => {
+    setShowDeleteConfirm(false);
+    try {
+      setLoading(true);
+      await deleteSession(kelas.id);
+      alert('Sesi berhasil dihapus.');
+      router.replace('/home');
+    } catch (error: any) {
+      console.error(error);
+      alert(error.message || "Gagal menghapus sesi.");
+      setLoading(false);
     }
   };
 
@@ -202,21 +221,42 @@ export default function DetailSesiScreen() {
             </View>
             
             {isAsisten ? (
-              <Pressable
-                onPress={handleToggleStatus}
-                disabled={loadingToggle || !canToggle}
-                style={({ pressed }) => [
-                  styles.button,
-                  { backgroundColor: buttonBg },
-                  pressed && canToggle && { opacity: 0.85 },
-                ]}
-              >
-                {loadingToggle ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.buttonText}>{buttonText}</Text>
-                )}
-              </Pressable>
+              <View style={{ width: '100%', gap: 12 }}>
+                <Pressable
+                  onPress={() => setShowConfirm(true)}
+                  disabled={loadingToggle || !canToggle}
+                  style={({ pressed }) => [
+                    styles.button,
+                    { backgroundColor: buttonBg },
+                    pressed && canToggle && { opacity: 0.85 },
+                  ]}
+                >
+                  {loadingToggle ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.buttonText}>{buttonText}</Text>
+                  )}
+                </Pressable>
+
+                {/* TOMBOL EDIT & HAPUS */}
+                <View style={styles.actionRow}>
+                  <Pressable
+                    onPress={() => setShowEditModal(true)}
+                    style={({ pressed }) => [styles.actionBtnOutline, pressed && { opacity: 0.7 }]}
+                  >
+                    <Ionicons name="pencil" size={18} color="#1B2A4E" />
+                    <Text style={styles.actionBtnTextOutline}>Edit Sesi</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => setShowDeleteConfirm(true)}
+                    style={({ pressed }) => [styles.actionBtnDanger, pressed && { opacity: 0.7 }]}
+                  >
+                    <Ionicons name="trash" size={18} color="#B91C1C" />
+                    <Text style={styles.actionBtnTextDanger}>Hapus</Text>
+                  </Pressable>
+                </View>
+              </View>
             ) : (
               <View style={{ width: '100%', marginTop: 10 }}>
                  <Pressable
@@ -237,6 +277,74 @@ export default function DetailSesiScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* MODAL KONFIRMASI BUKA/TUTUP */}
+      <Modal visible={showConfirm} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconWrap}>
+              <Ionicons name={currentStatus === 'open' ? 'lock-closed' : 'lock-open'} size={32} color={currentStatus === 'open' ? '#B91C1C' : '#15803D'} />
+            </View>
+            <Text style={styles.modalTitle}>{currentStatus === 'open' ? 'Tutup Sesi?' : 'Buka Sesi?'}</Text>
+            <Text style={styles.modalSub}>Apakah Anda yakin ingin {currentStatus === 'open' ? 'menutup' : 'membuka'} sesi praktikum ini?</Text>
+            <View style={styles.modalActions}>
+              <Pressable style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setShowConfirm(false)}>
+                <Text style={styles.modalBtnCancelText}>Batal</Text>
+              </Pressable>
+              <Pressable style={[styles.modalBtn, { backgroundColor: currentStatus === 'open' ? '#B91C1C' : '#15803D' }]} onPress={executeToggleStatus}>
+                <Text style={styles.modalBtnConfirmText}>Ya, Lanjutkan</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL KONFIRMASI HAPUS */}
+      <Modal visible={showDeleteConfirm} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={[styles.modalIconWrap, { backgroundColor: '#FEE2E2' }]}>
+              <Ionicons name="trash" size={32} color="#B91C1C" />
+            </View>
+            <Text style={styles.modalTitle}>Hapus Sesi?</Text>
+            <Text style={styles.modalSub}>Sesi yang dihapus tidak dapat dikembalikan. Apakah Anda yakin?</Text>
+            <View style={styles.modalActions}>
+              <Pressable style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setShowDeleteConfirm(false)}>
+                <Text style={styles.modalBtnCancelText}>Batal</Text>
+              </Pressable>
+              <Pressable style={[styles.modalBtn, { backgroundColor: '#B91C1C' }]} onPress={executeDelete}>
+                <Text style={styles.modalBtnConfirmText}>Ya, Hapus</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL FORM EDIT */}
+      <SessionFormModal
+        visible={showEditModal}
+        mode="edit"
+        initialData={{
+          courseName: kelas.courseName,
+          className: kelas.className,
+          room: kelas.room,
+          description: kelas.description || '',
+          startTime: kelas.startTime || (kelas.timeRange ? kelas.timeRange.split('-')[0].trim() : ''),
+          endTime: kelas.endTime || (kelas.timeRange ? kelas.timeRange.split('-')[1].replace('WIB', '').trim() : ''),
+          dateTimestamp: kelas.dateTimestamp,
+        }}
+        onClose={() => setShowEditModal(false)}
+        onSubmit={async (data) => {
+          try {
+            await updateSession(kelas.id, data);
+            setShowEditModal(false);
+            fetchDetail();
+            alert('Sesi berhasil diubah!');
+          } catch (error: any) {
+            alert(error.message);
+          }
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -268,6 +376,25 @@ const styles = StyleSheet.create({
   avatar: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 14, fontWeight: '800' },
   assistName: { color: '#1B2A4E', fontSize: 15, fontWeight: '700' },
-  button: { width: '100%', borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
+  button: { width: '100%', borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
   buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  
+  // STYLE TOMBOL EDIT & HAPUS
+  actionRow: { flexDirection: 'row', gap: 10, width: '100%' },
+  actionBtnOutline: { flex: 1, flexDirection: 'row', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  actionBtnTextOutline: { color: '#1B2A4E', fontWeight: '700', fontSize: 14 },
+  actionBtnDanger: { flex: 1, flexDirection: 'row', backgroundColor: '#FEE2E2', borderRadius: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  actionBtnTextDanger: { color: '#B91C1C', fontWeight: '700', fontSize: 14 },
+
+  // STYLE BUAT MODAL
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 24, width: '100%', maxWidth: 400, alignItems: 'center' },
+  modalIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#1B2A4E', marginBottom: 8 },
+  modalSub: { fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  modalActions: { flexDirection: 'row', width: '100%', gap: 12 },
+  modalBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
+  modalBtnCancel: { backgroundColor: '#F1F5F9' },
+  modalBtnCancelText: { color: '#64748B', fontWeight: '700', fontSize: 14 },
+  modalBtnConfirmText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
 });
