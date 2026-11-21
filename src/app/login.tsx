@@ -6,17 +6,25 @@ import {
   AuthButton,
   AuthError,
   AuthField,
+  AuthOptionGroup,
   AuthShell,
   authColors,
 } from '@/components/auth-ui';
 import { useApp } from '@/context/app-context';
 import { authErrorMessage, useAuth } from '@/context/auth-context';
+import type { Role } from '@/types/attendance';
+
+const roleOptions: { value: Role; label: string; icon: 'school-outline' | 'clipboard-outline' }[] = [
+  { value: 'praktikan', label: 'Praktikan', icon: 'school-outline' },
+  { value: 'asisten', label: 'Asisten', icon: 'clipboard-outline' },
+];
 
 export default function LoginScreen() {
   const { login } = useAuth();
   const { login: setDummyUser } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState<Role>('praktikan');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,14 +37,9 @@ export default function LoginScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      const p = await login(email, password);
+      const p = await login(email, password, role);
       setDummyUser(p.role);
-      
-      if (p.role === 'asisten' && p.approvalStatus === 'pending') {
-        router.replace('/pending');
-      } else {
-        router.replace('/home');
-      }
+      router.replace(p.role === 'asisten' && p.approvalStatus === 'pending' ? '/pending' : '/home');
     } catch (e) {
       setError(
         e instanceof Error && !('code' in e) ? e.message : authErrorMessage(e),
@@ -69,6 +72,7 @@ export default function LoginScreen() {
         autoCapitalize="none"
         keyboardType="email-address"
       />
+      <AuthOptionGroup label="Masuk sebagai" options={roleOptions} value={role} onChange={setRole} />
       <AuthField
         label="Kata sandi"
         icon="lock-closed-outline"

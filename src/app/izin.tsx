@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { authColors } from '@/components/auth-ui';
@@ -11,6 +11,7 @@ import { useAttendance } from '@/context/attendance-context';
 import { useAuth } from '@/context/auth-context';
 import { validateReason } from '@/services/practitioner-service';
 import { firebaseErrorMessage } from '@/utils/firebase-error';
+import { getSessionStatus } from '@/utils/session-status';
 
 export default function PermissionScreen() {
   const params = useLocalSearchParams<{ courseName?: string | string[]; className?: string | string[]; sessionId?: string | string[] }>();
@@ -28,7 +29,7 @@ export default function PermissionScreen() {
   const [success, setSuccess] = useState(false);
   const [focused, setFocused] = useState(false);
   const lock = useRef(false);
-  const eligible = sessions.filter((session) => session.status !== 'closed'
+  const eligible = sessions.filter((session) => getSessionStatus(session) !== 'closed'
     && (!courseName || normalize(session.courseName) === normalize(courseName))
     && (!className || normalizeClass(session.className) === normalizeClass(className))
     && !records.some((record) => record.sessionId === session.id)
@@ -65,10 +66,10 @@ export default function PermissionScreen() {
 
   if (authLoading) return <View style={styles.loadingScreen}><ActivityIndicator color={authColors.navy} accessibilityLabel="Memuat akun" /></View>;
   if (!profile) return <Redirect href="/login" />;
-  if (profile.role !== 'praktikan') return <Redirect href="/jadwal" />;
+  if (profile.role !== 'praktikan') return <Redirect href="/home" />;
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.screen} behavior="padding">
       <ScrollView
         aria-hidden={success}
         keyboardShouldPersistTaps="handled"
@@ -127,8 +128,8 @@ export default function PermissionScreen() {
                     <Text style={styles.sessionTitle}>{session.courseName}</Text>
                     <Text style={styles.meta}>{session.className}</Text>
                     <Text style={styles.meta}>{session.dateLabel}{'\n'}{session.timeRange}</Text>
-                    <Text style={[styles.sessionStatus, session.status === 'open' ? styles.statusOpen : styles.statusUpcoming]}>
-                      {session.status === 'open' ? 'Sesi dibuka' : 'Akan berlangsung'}
+                    <Text style={[styles.sessionStatus, getSessionStatus(session) === 'open' ? styles.statusOpen : styles.statusUpcoming]}>
+                      {getSessionStatus(session) === 'open' ? 'Sesi dibuka' : 'Akan berlangsung'}
                     </Text>
                   </View>
                   <Ionicons name={active ? 'checkmark-circle' : 'radio-button-off-outline'} size={24} color={active ? authColors.navy : authColors.muted} />

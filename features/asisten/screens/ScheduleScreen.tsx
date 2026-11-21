@@ -68,7 +68,7 @@ export function ScheduleScreen() {
                 <View style={styles.headerActions}>
                   <Pressable
                     style={styles.permissionsButton}
-                    onPress={() => router.push('/(asisten)/permissions')}
+                    onPress={() => router.push('/permissions')}
                   >
                     <Text style={styles.permissionsButtonText}>📄 Izin</Text>
                   </Pressable>

@@ -20,15 +20,16 @@ import type {
   Attendance,
   PermissionRequestItem,
   Session,
-  SessionStatus,
 } from '../../features/asisten/types';
-import { isSessionClosed, isSessionOpen, isSessionUpcoming } from '../../features/asisten/types';
 import { classifyReason } from './ai/classifier';
 import { normalizeNim } from '@/utils/nim';
+import { hasRole } from '@/utils/roles';
+import { getSessionStatus, normalizeSessionStatus } from '@/utils/session-status';
 
 export type SessionInput = {
   courseName: string;
   courseCode?: string;
+  classId?: string;
   className: string;
   dateLabel: string;
   timeRange: string;
@@ -109,6 +110,7 @@ export async function resolveParticipantUids(
         nim: String(data.nim ?? '').trim(),
         email: String(data.email ?? '').trim(),
         role: data.role,
+        roles: data.roles,
       };
     });
 
@@ -117,7 +119,9 @@ export async function resolveParticipantUids(
 
     for (const participant of participants) {
       const nim = normalizeNim(participant.nim);
-      const matches = directory.filter((user) => user.role === 'praktikan' && !!user.nim && normalizeNim(user.nim) === nim);
+      const matches = directory.filter(
+        (user) => hasRole(user, 'praktikan') && !!user.nim && normalizeNim(user.nim) === nim,
+      );
 
       if (matches.length === 1) {
         uids.add(matches[0].uid);
@@ -156,9 +160,25 @@ export async function createSession(
   }
 
   try {
+    let participantIds = input.participantIds || [];
+
+    if (input.classId) {
+      try {
+        const classSnap = await getDoc(doc(db, 'classes', input.classId));
+        if (classSnap.exists()) {
+          const roster = (classSnap.data().participants ?? []) as ClassParticipant[];
+          const mapping = await resolveParticipantUids(roster);
+          participantIds = mapping.uids;
+        }
+      } catch {
+        participantIds = input.participantIds || [];
+      }
+    }
+
     const docRef = await addDoc(collection(db, 'sessions'), {
       courseName: input.courseName.trim(),
       courseCode: input.courseCode?.trim() || '',
+      classId: input.classId || '',
       className: input.className.trim(),
       dateLabel: input.dateLabel.trim(),
       timeRange: input.timeRange.trim(),
@@ -167,7 +187,7 @@ export async function createSession(
       assistantName: assistantName || 'Asisten',
       assistantId: user.uid,
       status: 'upcoming',
-      participantIds: input.participantIds || [],
+      participantIds,
       date: dateTimestamp,
       dateTimestamp: dateTimestamp,
       startTime: input.startTime?.trim() || '',
@@ -213,7 +233,25 @@ export async function updateSession(
   if (input.timeRange !== undefined) updatePayload.timeRange = input.timeRange.trim();
   if (input.room !== undefined) updatePayload.room = input.room.trim();
   if (input.description !== undefined) updatePayload.description = input.description.trim();
-  if (input.participantIds !== undefined) updatePayload.participantIds = input.participantIds;
+  if (input.participantIds !== undefined && updatePayload.participantIds === undefined) {
+    updatePayload.participantIds = input.participantIds;
+  }
+  if (input.classId !== undefined) {
+    updatePayload.classId = input.classId;
+    if (input.classId) {
+      try {
+        const classSnap = await getDoc(doc(db, 'classes', input.classId));
+        if (classSnap.exists()) {
+          const mapping = await resolveParticipantUids(
+            (classSnap.data().participants ?? []) as ClassParticipant[],
+          );
+          updatePayload.participantIds = mapping.uids;
+        }
+      } catch {
+        updatePayload.participantIds = input.participantIds ?? [];
+      }
+    }
+  }
   if (input.startTime !== undefined) updatePayload.startTime = input.startTime.trim();
   if (input.endTime !== undefined) updatePayload.endTime = input.endTime.trim();
   if (input.date !== undefined || input.dateTimestamp !== undefined) {
@@ -274,6 +312,29 @@ export async function setSessionStatus(
   });
 }
 
+/**
+ * Menyimpan transisi status otomatis (upcoming → open → closed) supaya field
+ * `status` di Firestore sama dengan yang dilihat di layar. Hanya asisten yang
+ * boleh menulis dokumen sesi, jadi fungsi ini dipanggil dari layar asisten.
+ */
+export async function syncSessionStatuses(
+  sessions: { id: string; status?: string; [key: string]: any }[]
+): Promise<void> {
+  if (!db) return;
+
+  const pending = sessions
+    .map((session) => ({
+      id: session.id,
+      current: normalizeSessionStatus(session.status),
+      next: getSessionStatus(session),
+    }))
+    .filter((item) => item.current !== item.next);
+
+  await Promise.allSettled(
+    pending.map((item) => updateDoc(doc(db!, 'sessions', item.id), { status: item.next }))
+  );
+}
+
 export function subscribeAssistantSessions(
   onData: (sessions: Session[]) => void,
   onError: (error: Error) => void
@@ -302,6 +363,7 @@ export function subscribeAssistantSessions(
           id: d.id,
           courseName: raw.courseName ?? '',
           courseCode: raw.courseCode ?? '',
+          classId: raw.classId ?? '',
           kelas: raw.className ?? raw.kelas ?? '',
           className: raw.className ?? raw.kelas ?? '',
           date: dateStr,
@@ -312,7 +374,7 @@ export function subscribeAssistantSessions(
           room: raw.room ?? '',
           assistantId: raw.assistantId ?? '',
           assistantName: raw.assistantName ?? '',
-          status: (raw.status as SessionStatus) ?? 'upcoming',
+          status: normalizeSessionStatus(raw.status) ?? 'upcoming',
           description: raw.description,
           participantIds: raw.participantIds ?? [],
         };

@@ -1,77 +1,103 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
-  Pressable,
-  ActivityIndicator,
 } from 'react-native';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 
+import { BottomTabInset } from '@/constants/theme';
+import { useAttendance } from '@/context/attendance-context';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
+import { firebaseErrorMessage } from '@/utils/firebase-error';
+import { greeting, initials } from '@/utils/home-format';
 import { getSessionStatus } from '@/utils/session-status';
-import { AsistenHome } from '@/components/asisten-home'; // IMPORT ASISTEN HOME
+import { AsistenHome } from '@/components/asisten-home';
+
+const STATUS_UI = {
+  open: { label: 'Dibuka', dot: '#22C55E', bg: '#DCFCE7', fg: '#16A34A' },
+  upcoming: { label: 'Belum Dibuka', dot: '#94A3B8', bg: '#EEF1F6', fg: '#64748B' },
+  closed: { label: 'Ditutup', dot: '#EF4444', bg: '#FEE2E2', fg: '#B91C1C' },
+};
 
 export default function HomeScreen() {
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
-  
+  const { hasAttended } = useAttendance();
+
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
+  const isAsisten = profile?.role === 'asisten';
+  const uid = profile?.uid;
 
   useEffect(() => {
-    if (profile?.role === 'asisten') return; // Jangan tarik data kalau yang login asisten
+    if (isAsisten || !uid) return;
 
-    const q = collection(db, 'sessions');
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setSessions(data);
-      setLoading(false);
-    }, (error) => {
-      console.error("Gagal load sesi:", error);
-      setLoading(false);
-    });
+    // Firestore rules hanya mengizinkan praktikan membaca sesi miliknya,
+    // jadi query wajib difilter participantIds.
+    const q = query(collection(db, 'sessions'), where('participantIds', 'array-contains', uid));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        setSessions(snapshot.docs.map((document) => ({ id: document.id, ...document.data() })));
+        setError(null);
+        setLoading(false);
+      },
+      (failure) => {
+        setError(firebaseErrorMessage(failure));
+        setLoading(false);
+      },
+    );
 
     return () => unsubscribe();
-  }, [profile?.role]);
+  }, [isAsisten, uid]);
 
-  // ===== INI KUNCINYA =====
-  // Kalau yang login Asisten, lempar ke tampilan AsistenHome
-  if (profile?.role === 'asisten') {
+  const filtered = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    const sorted = [...sessions].sort((a, b) => {
+      const left = getSessionStatus(a) === 'open' ? 0 : 1;
+      const right = getSessionStatus(b) === 'open' ? 0 : 1;
+      return left - right;
+    });
+    if (!keyword) return sorted;
+    return sorted.filter((item) =>
+      [item.courseName, item.className, item.room, item.dateLabel]
+        .filter(Boolean)
+        .some((value: string) => String(value).toLowerCase().includes(keyword)),
+    );
+  }, [sessions, search]);
+
+  if (isAsisten) {
     return (
       <View style={{ flex: 1 }}>
         <AsistenHome />
       </View>
     );
   }
-  // ========================
 
-  const getInitials = (name?: string) => {
-    if (!name) return 'MK';
-    return name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase();
-  };
-
-  const firstName = profile?.name?.split(' ')[0] || 'Praktikan';
+  const firstName = profile?.name?.split(/\s+/)[0] || 'Praktikan';
 
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
         <View style={styles.headerTop}>
           <View>
-            <Text style={styles.greeting}>Selamat Pagi!</Text>
+            <Text style={styles.greeting}>{greeting()}</Text>
             <Text style={styles.name}>Hai, {firstName}</Text>
           </View>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials(profile?.name)}</Text>
+            <Text style={styles.avatarText}>{initials(profile?.name ?? '')}</Text>
           </View>
         </View>
 
@@ -81,19 +107,30 @@ export default function HomeScreen() {
             placeholder="Cari mata praktikum"
             placeholderTextColor="#94A3B8"
             style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            accessibilityLabel="Cari mata praktikum"
           />
+          {search ? (
+            <Pressable onPress={() => setSearch('')} hitSlop={8} accessibilityLabel="Hapus pencarian">
+              <Ionicons name="close-circle" size={18} color="#94A3B8" />
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + BottomTabInset + 40 }]}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Jadwal Praktikum</Text>
-          <Pressable>
-            <Text style={styles.seeAllText}>Lihat Semua</Text>
-          </Pressable>
+          {search ? (
+            <Pressable onPress={() => setSearch('')}>
+              <Text style={styles.seeAllText}>Lihat Semua</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={styles.dateCard}>
@@ -102,51 +139,46 @@ export default function HomeScreen() {
           </View>
           <View>
             <Text style={styles.dateText}>Jadwal Praktikum</Text>
-            <Text style={styles.dateSubText}>{sessions.length} sesi terdaftar</Text>
+            <Text style={styles.dateSubText}>{sessions.length} kelas terdaftar</Text>
           </View>
         </View>
 
         {loading ? (
           <ActivityIndicator size="large" color="#1B2A4E" style={{ marginTop: 20 }} />
-        ) : sessions.length === 0 ? (
-          <Text style={{ textAlign: 'center', color: '#64748B', marginTop: 20 }}>
-            Belum ada jadwal praktikum.
+        ) : error ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : filtered.length === 0 ? (
+          <Text style={styles.emptyText}>
+            {search ? 'Tidak ada sesi yang cocok dengan pencarian.' : 'Belum ada jadwal praktikum.'}
           </Text>
         ) : (
-          sessions.map((item) => {
-            const status = getSessionStatus(item);
-            const isOpen = status === 'open';
-            const isUpcoming = status === 'upcoming';
-
-            let badgeBg = '#EEF1F6';
-            let dotBg = '#94A3B8';
-            let textColor = '#64748B';
-            let textLabel = 'Belum Dibuka';
-
-            if (isOpen) {
-              badgeBg = '#DCFCE7'; dotBg = '#22C55E'; textColor = '#16A34A'; textLabel = 'Dibuka';
-            } else if (!isUpcoming) {
-              badgeBg = '#FEE2E2'; dotBg = '#EF4444'; textColor = '#B91C1C'; textLabel = 'Ditutup';
-            }
+          filtered.map((item) => {
+            const statusType = getSessionStatus(item);
+            const st = STATUS_UI[statusType];
+            const attended = hasAttended(item.id);
 
             return (
-              <Pressable 
-                key={item.id} 
+              <Pressable
+                key={item.id}
                 style={styles.sessionCard}
                 onPress={() => router.push(`/detail-sesi?id=${item.id}`)}
               >
                 <View style={styles.sessionHeader}>
                   <View style={styles.sessionIconBg}>
-                    <Text style={styles.sessionIconText}>{getInitials(item.courseName)}</Text>
+                    <Text style={styles.sessionIconText}>{initials(item.courseName || '')}</Text>
                   </View>
                   <View style={styles.sessionInfo}>
                     <Text style={styles.sessionTitle}>{item.courseName}</Text>
                     <Text style={styles.sessionRoom}>{item.className} · {item.room}</Text>
                   </View>
                   <View style={styles.sessionRight}>
-                    <View style={[styles.badge, { backgroundColor: badgeBg }]}>
-                      <View style={[styles.badgeDot, { backgroundColor: dotBg }]} />
-                      <Text style={[styles.badgeText, { color: textColor }]}>{textLabel}</Text>
+                    <View style={[styles.badge, { backgroundColor: attended ? '#E6F6EC' : st.bg }]}>
+                      <View style={[styles.badgeDot, { backgroundColor: attended ? '#16A34A' : st.dot }]} />
+                      <Text style={[styles.badgeText, { color: attended ? '#15803D' : st.fg }]}>
+                        {attended ? 'Hadir' : st.label}
+                      </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color="#64748B" />
                   </View>
@@ -184,6 +216,9 @@ const styles = StyleSheet.create({
   dateIconBg: { width: 40, height: 40, backgroundColor: '#D0D9E8', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   dateText: { fontSize: 15, fontWeight: '700', color: '#1B2A4E' },
   dateSubText: { fontSize: 13, color: '#64748B', marginTop: 2 },
+  emptyText: { textAlign: 'center', color: '#64748B', marginTop: 20 },
+  errorBox: { backgroundColor: '#FEE2E2', borderRadius: 12, padding: 12, marginTop: 8 },
+  errorText: { color: '#B91C1C', fontSize: 13 },
   sessionCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   sessionHeader: { flexDirection: 'row', alignItems: 'center' },
   sessionIconBg: { width: 44, height: 44, backgroundColor: '#1B2A4E', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },

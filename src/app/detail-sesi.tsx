@@ -1,244 +1,322 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/context/auth-context';
+import { doc, onSnapshot } from 'firebase/firestore';
+
+import { AttendanceConfirmationModal, type AttendanceModalPhase } from '@/components/attendance-confirmation-modal';
+import { SessionEnrollment } from '@/components/session-enrollment';
 import { StateView } from '@/components/state-view';
+import { useAttendance } from '@/context/attendance-context';
+import { useAuth } from '@/context/auth-context';
+import { db } from '@/lib/firebase';
+import { syncClassSessions } from '@/services/class-sync';
+import {
+  deleteSession,
+  setSessionStatus,
+  subscribeSessionAttendances,
+  updateSession,
+} from '@/services/assistant-service';
+import { firebaseErrorMessage } from '@/utils/firebase-error';
 import { initials } from '@/utils/home-format';
-import { getSessionStatus } from '@/utils/session-status';
-// Import fungsi hapus & edit dari service temen lu
-import { deleteSession, updateSession } from '@/services/assistant-service';
-// Import modal form dari folder features
+import { getSessionStatus, isSessionFinished } from '@/utils/session-status';
 import { SessionFormModal } from '../../features/asisten/components/SessionFormModal';
+import type { Attendance } from '../../features/asisten/types';
+
+function timePart(range?: string, index = 0) {
+  if (!range) return '';
+  const parts = String(range).split(/[-–]/);
+  return (parts[index] ?? '').replace(/WIB/i, '').trim();
+}
 
 export default function DetailSesiScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ id?: string | string[]; action?: string | string[] }>();
+  const params = useLocalSearchParams<{ id?: string | string[] }>();
   const sessionId = Array.isArray(params.id) ? params.id[0] : params.id;
-  const action = Array.isArray(params.action) ? params.action[0] : params.action;
-  
+
   const { profile, loading: authLoading } = useAuth();
-  
-  const [kelas, setKelas] = useState<any>(null);
+  const { records, permissions, checkIn } = useAttendance();
+
+  const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [manualStatus, setManualStatus] = useState<string | null>(null);
-  const [loadingToggle, setLoadingToggle] = useState(false);
-  
-  // State buat Pop-up dan Form
+  const [error, setError] = useState<string | null>(null);
+
+  const [busy, setBusy] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
 
+  const [attendances, setAttendances] = useState<Attendance[]>([]);
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
+  const [roster, setRoster] = useState<{ nim: string; name: string }[]>([]);
+
+  const [phase, setPhase] = useState<AttendanceModalPhase>('closed');
+
   const isAsisten = profile?.role === 'asisten';
+  const classId: string = session?.classId ?? '';
 
-  const goBack = () => { 
-    if (router.canGoBack()) router.back(); 
-    else router.replace('/home'); 
-  };
-
-  const fetchDetail = async () => {
-    if (!sessionId) {
-      setLoading(false);
-      return;
-    }
-    try {
-      let docSnap = null;
-      let collectionName = 'sessions';
-
-      try {
-        const docRef = doc(db, 'sessions', sessionId);
-        docSnap = await getDoc(docRef);
-      } catch (e) {
-        console.log('Bukan di sessions, ngecek classes...');
-      }
-
-      if (!docSnap || !docSnap.exists()) {
-        collectionName = 'classes';
-        const docRef = doc(db, 'classes', sessionId);
-        docSnap = await getDoc(docRef);
-      }
-      
-      if (docSnap && docSnap.exists()) {
-        const data = docSnap.data();
-        setKelas({ 
-          id: docSnap.id, 
-          _collection: collectionName,
-          ...data,
-          courseName: data.courseName || data.course || 'Mata Kuliah',
-          className: data.className || data.name || 'Kelas',
-          timeRange: data.timeRange || `${data.startTime || data.timeStart || '--'} - ${data.endTime || data.timeEnd || '--'}`,
-          assistantName: data.assistantName || 'Asisten Hadirin'
-        });
-      }
-    } catch (error) {
-      console.error("Error load detail:", error);
-    } finally {
-      setLoading(false);
-    }
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/home');
   };
 
   useEffect(() => {
-    fetchDetail();
+    if (!sessionId) return;
+
+    const unsubscribe = onSnapshot(
+      doc(db, 'sessions', sessionId),
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          setSession(null);
+        } else {
+          setSession({ id: snapshot.id, ...snapshot.data() });
+        }
+        setError(null);
+        setLoading(false);
+      },
+      (failure) => {
+        setError(firebaseErrorMessage(failure));
+        setLoading(false);
+      },
+    );
+
+    return () => unsubscribe();
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!isAsisten || !sessionId) return;
+
+    const unsubscribe = subscribeSessionAttendances(
+      sessionId,
+      (items) => {
+        setAttendances(items);
+        setAttendanceError(null);
+      },
+      () => setAttendanceError('Gagal memuat data kehadiran. Periksa koneksi.'),
+    );
+
+    return () => unsubscribe();
+  }, [isAsisten, sessionId]);
+
+  useEffect(() => {
+    if (!isAsisten || !classId) return;
+
+    const unsubscribe = onSnapshot(
+      doc(db, 'classes', classId),
+      (snapshot) => setRoster((snapshot.data()?.participants ?? []) as { nim: string; name: string }[]),
+      () => setRoster([]),
+    );
+
+    return () => unsubscribe();
+  }, [isAsisten, classId]);
 
   if (authLoading) {
     return <View style={styles.screen}><StateView kind="loading" /></View>;
   }
-  
-  if (!profile) {
-    return <Redirect href="/login" />;
-  }
 
-  if (loading) {
-    return (
-      <View style={[styles.screen, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#1B2A4E" />
-        <Text style={{ marginTop: 12, color: '#64748B' }}>Memuat detail...</Text>
-      </View>
-    );
-  }
+  if (!profile) return <Redirect href="/login" />;
 
-  if (!kelas) {
+  if (!sessionId) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top + 32, paddingHorizontal: 20 }]}>
-        <StateView 
+        <StateView
           kind="empty"
-          title="Kelas tidak ditemukan"
-          message="Data mungkin sudah dihapus atau kamu tidak punya akses."
+          title="Sesi tidak ditemukan"
+          message="Buka detail sesi dari daftar jadwal."
           actionLabel="Kembali ke Home"
-          onAction={goBack} 
+          onAction={goBack}
         />
       </View>
     );
   }
 
-  const autoStatus = getSessionStatus(kelas); 
-  const currentStatus = manualStatus || autoStatus;
-
-  const isWithinTime = autoStatus === 'open';
-  const canToggle = isWithinTime;
-
-  let buttonBg = '#94A3B8';
-  let buttonText = autoStatus === 'upcoming' ? 'Sesi Belum Dimulai' : 'Sesi Telah Berakhir';
-
-  if (canToggle) {
-    if (currentStatus === 'open') {
-      buttonBg = '#B91C1C';
-      buttonText = 'Tutup Sesi Praktikum';
-    } else {
-      buttonBg = '#15803D';
-      buttonText = 'Buka Sesi Praktikum';
-    }
+  if (loading) {
+    return (
+      <View style={[styles.screen, styles.center]}>
+        <ActivityIndicator size="large" color="#1B2A4E" />
+        <Text style={styles.centerText}>Memuat detail...</Text>
+      </View>
+    );
   }
 
-  const status = currentStatus === 'open'
+  if (!session) {
+    return (
+      <View style={[styles.screen, { paddingTop: insets.top + 32, paddingHorizontal: 20 }]}>
+        <StateView
+          kind="empty"
+          title="Sesi tidak ditemukan"
+          message={error ?? 'Data mungkin sudah dihapus oleh asisten.'}
+          actionLabel="Kembali ke Home"
+          onAction={goBack}
+        />
+      </View>
+    );
+  }
+
+  const status = getSessionStatus(session);
+  const finished = isSessionFinished(session);
+  const participantIds: string[] = session.participantIds ?? [];
+  const unmappedCount = Math.max(0, roster.length - participantIds.length);
+  const isParticipant = !!profile.uid && participantIds.includes(profile.uid);
+  const attended = records.some((record) => record.sessionId === session.id);
+  const requested = permissions.some((request) => request.sessionId === session.id);
+
+  const statusChip = status === 'open'
     ? { label: 'Sesi sedang dibuka', color: '#15803D', background: '#E6F6EC' }
-    : currentStatus === 'upcoming'
+    : status === 'upcoming'
       ? { label: 'Sesi belum dibuka', color: '#52627A', background: '#EEF1F6' }
       : { label: 'Sesi telah ditutup', color: '#B91C1C', background: '#FEE2E2' };
 
-  const executeToggleStatus = async () => {
-    setShowConfirm(false);
-    try {
-      setLoadingToggle(true);
-      const newStatus = currentStatus === 'open' ? 'closed' : 'open';
-      await updateDoc(doc(db, kelas._collection, kelas.id), { status: newStatus });
-      setManualStatus(newStatus);
-      alert(`Sesi berhasil di-${newStatus === 'open' ? 'buka' : 'tutup'}!`);
-    } catch (error: any) {
-      console.error(error);
-      alert(error.message || "Gagal mengubah status sesi.");
-    } finally {
-      setLoadingToggle(false);
-    }
-  };
+  const toggleLabel = status === 'open'
+    ? 'Tutup Sesi Praktikum'
+    : finished
+      ? 'Sesi Telah Berakhir'
+      : 'Buka Sesi Praktikum';
 
-  const executeDelete = async () => {
-    setShowDeleteConfirm(false);
+  const presensiLabel = attended
+    ? 'Presensi Tercatat'
+    : requested
+      ? 'Izin Sudah Diajukan'
+      : !isParticipant
+        ? 'Bukan Peserta Sesi'
+        : status === 'upcoming'
+          ? 'Sesi Belum Dibuka'
+          : status === 'closed'
+            ? 'Sesi Telah Ditutup'
+            : 'Isi Presensi';
+
+  const canPresensi = isParticipant && !attended && !requested && status === 'open';
+
+  async function executeToggle() {
+    setShowConfirm(false);
+    setBusy(true);
+    setError(null);
     try {
-      setLoading(true);
-      await deleteSession(kelas.id);
-      alert('Sesi berhasil dihapus.');
-      router.replace('/home');
-    } catch (error: any) {
-      console.error(error);
-      alert(error.message || "Gagal menghapus sesi.");
-      setLoading(false);
+      await setSessionStatus(session.id, status === 'open' ? 'closed' : 'open');
+    } catch (failure: any) {
+      setError(firebaseErrorMessage(failure));
+    } finally {
+      setBusy(false);
     }
-  };
+  }
+
+  async function executeDelete() {
+    setShowDeleteConfirm(false);
+    setBusy(true);
+    try {
+      await deleteSession(session.id);
+      router.replace('/home');
+    } catch (failure: any) {
+      setError(firebaseErrorMessage(failure));
+      setBusy(false);
+    }
+  }
+
+  async function confirmPresensi() {
+    setBusy(true);
+    try {
+      await checkIn(session.id);
+      setPhase('success');
+    } catch (failure) {
+      const message = firebaseErrorMessage(failure);
+      if (/sudah tercatat/i.test(message)) {
+        setPhase('duplicate');
+      } else if (/belum dibuka|sudah ditutup/i.test(message)) {
+        setPhase('unavailable');
+      } else {
+        setPhase('closed');
+        setError(message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.screen} behavior="padding">
       <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
         <View style={styles.headerRow}>
-          <Pressable style={styles.backButton} onPress={goBack} hitSlop={8}>
+          <Pressable style={styles.backButton} onPress={goBack} hitSlop={8} accessibilityLabel="Kembali">
             <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>{kelas.courseName}</Text>
+            <Text style={styles.headerTitle}>{session.courseName}</Text>
             <View style={styles.metaRow}>
               <Ionicons name="location-outline" size={14} color="#B6C2DB" />
-              <Text style={[styles.metaText, { flexShrink: 1 }]}>{kelas.className} · {kelas.room}</Text>
+              <Text style={[styles.metaText, { flexShrink: 1 }]}>{session.className} · {session.room}</Text>
             </View>
           </View>
         </View>
       </View>
-      
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
+
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.inner}>
           <View style={styles.statusChipWrap}>
-            <View style={[styles.statusChip, { backgroundColor: status.background }]}>
-              <View style={[styles.statusDot, { backgroundColor: status.color }]} />
-              <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
+            <View style={[styles.statusChip, { backgroundColor: statusChip.background }]}>
+              <View style={[styles.statusDot, { backgroundColor: statusChip.color }]} />
+              <Text style={[styles.statusText, { color: statusChip.color }]}>{statusChip.label}</Text>
             </View>
           </View>
-          
+
           <View style={styles.card}>
             <View style={styles.cardIconWrap}><Ionicons name="calendar-outline" size={26} color="#1B2A4E" /></View>
-            <Text style={styles.dateLabel}>{kelas.dateLabel || 'Tanggal belum diatur'}</Text>
-            <Text style={styles.sessionTitle}>{kelas.courseName}</Text>
-            
+            <Text style={styles.dateLabel}>{session.dateLabel || 'Tanggal belum diatur'}</Text>
+            <Text style={styles.sessionTitle}>{session.courseName}</Text>
+
             <View style={styles.timeline}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.timeLabel}>Waktu praktikum</Text>
-                <Text style={styles.timeValue}>{kelas.timeRange}</Text>
+                <Text style={styles.timeValue}>{session.timeRange || `${session.startTime} - ${session.endTime}`}</Text>
               </View>
             </View>
-            
+
             <View style={styles.divider} />
-            
+
             <Text style={styles.assistLabel}>Asisten praktikum</Text>
             <View style={styles.assistList}>
               <View style={styles.assistRow}>
                 <View style={[styles.avatar, { backgroundColor: '#E0E7FF' }]}>
-                  <Text style={[styles.avatarText, { color: '#4338CA' }]}>{initials(kelas.assistantName)}</Text>
+                  <Text style={[styles.avatarText, { color: '#4338CA' }]}>{initials(session.assistantName || 'Asisten')}</Text>
                 </View>
-                <Text style={styles.assistName}>{kelas.assistantName}</Text>
+                <Text style={styles.assistName}>{session.assistantName || 'Asisten Hadirin'}</Text>
               </View>
             </View>
-            
+
+            {error ? (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={18} color="#B91C1C" />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
             {isAsisten ? (
               <View style={{ width: '100%', gap: 12 }}>
                 <Pressable
                   onPress={() => setShowConfirm(true)}
-                  disabled={loadingToggle || !canToggle}
+                  disabled={busy || finished}
                   style={({ pressed }) => [
                     styles.button,
-                    { backgroundColor: buttonBg },
-                    pressed && canToggle && { opacity: 0.85 },
+                    { backgroundColor: finished ? '#94A3B8' : status === 'open' ? '#B91C1C' : '#15803D' },
+                    pressed && !busy && !finished && { opacity: 0.85 },
                   ]}
                 >
-                  {loadingToggle ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.buttonText}>{buttonText}</Text>
-                  )}
+                  {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>{toggleLabel}</Text>}
                 </Pressable>
 
-                {/* TOMBOL EDIT & HAPUS */}
                 <View style={styles.actionRow}>
                   <Pressable
                     onPress={() => setShowEditModal(true)}
@@ -258,40 +336,123 @@ export default function DetailSesiScreen() {
                 </View>
               </View>
             ) : (
-              <View style={{ width: '100%', marginTop: 10 }}>
-                 <Pressable
-                    onPress={() => router.push(`/izin?id=${kelas.id}`)}
-                    style={({ pressed }) => [
-                      styles.button,
-                      { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#1B2A4E' },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Text style={[styles.buttonText, { color: '#1B2A4E' }]}>
-                      Ajukan Izin
+              <View style={{ width: '100%', gap: 10 }}>
+                {!isParticipant ? (
+                  <View style={styles.infoBox}>
+                    <Ionicons name="information-circle-outline" size={18} color="#8A5309" />
+                    <Text style={styles.infoText}>
+                      Belum terdaftar pada sesi kelas ini. Minta asisten menambahkan NIM akunmu ke sesi.
                     </Text>
-                  </Pressable>
+                  </View>
+                ) : null}
+
+                <Pressable
+                  onPress={() => setPhase('confirm')}
+                  disabled={!canPresensi || busy}
+                  style={({ pressed }) => [
+                    styles.button,
+                    { backgroundColor: canPresensi ? '#1B2A4E' : '#E2E8F0' },
+                    pressed && canPresensi && { opacity: 0.85 },
+                  ]}
+                >
+                  <Text style={[styles.buttonText, !canPresensi && { color: '#64748B' }]}>{presensiLabel}</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => router.push({
+                    pathname: '/izin',
+                    params: {
+                      sessionId: session.id,
+                      courseName: session.courseName,
+                      className: session.className,
+                    },
+                  })}
+                  disabled={attended || requested || status === 'closed'}
+                  style={({ pressed }) => [
+                    styles.button,
+                    styles.buttonOutline,
+                    (attended || requested || status === 'closed') && { opacity: 0.5 },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                >
+                  <Text style={[styles.buttonText, { color: '#1B2A4E' }]}>
+                    {requested ? 'Izin Sudah Diajukan' : 'Ajukan Izin'}
+                  </Text>
+                </Pressable>
               </View>
             )}
-            
           </View>
+
+          {isAsisten ? (
+            <>
+              <View style={styles.card}>
+                <View style={styles.sectionHead}>
+                  <Text style={styles.sectionTitle}>Kehadiran</Text>
+                  <Text style={styles.sectionCount}>
+                    Peserta kelas: {roster.length} · terdaftar di sesi: {participantIds.length}
+                    {unmappedCount > 0 ? ` · ${unmappedCount} belum punya akun` : ''}
+                  </Text>
+                  <Text style={styles.sectionCount}>{attendances.length} praktikan sudah hadir</Text>
+                </View>
+                {attendanceError ? <Text style={styles.errorText}>{attendanceError}</Text> : null}
+                {attendances.length === 0 ? (
+                  <Text style={styles.emptyText}>Belum ada praktikan yang melakukan presensi.</Text>
+                ) : (
+                  attendances.map((item) => (
+                    <View key={item.id} style={styles.attendanceRow}>
+                      <View style={styles.attendanceAvatar}>
+                        <Text style={styles.attendanceAvatarText}>{initials(item.practitionerName || 'PR')}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.attendanceName}>{item.practitionerName || 'Praktikan'}</Text>
+                        <Text style={styles.attendanceNim}>{item.practitionerNim || '-'}</Text>
+                      </View>
+                      <View style={styles.attendanceBadge}>
+                        <Text style={styles.attendanceBadgeText}>Hadir</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+
+              <View style={styles.card}>
+                <SessionEnrollment classId={classId || undefined} roster={classId ? roster : []} />
+              </View>
+            </>
+          ) : null}
         </View>
       </ScrollView>
 
-      {/* MODAL KONFIRMASI BUKA/TUTUP */}
-      <Modal visible={showConfirm} transparent animationType="fade">
+      <AttendanceConfirmationModal
+        phase={phase}
+        busy={busy}
+        onClose={() => setPhase('closed')}
+        onConfirm={() => void confirmPresensi()}
+        onViewHistory={() => { setPhase('closed'); router.push('/explore'); }}
+      />
+
+      <Modal visible={showConfirm} transparent animationType="fade" onRequestClose={() => setShowConfirm(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalIconWrap}>
-              <Ionicons name={currentStatus === 'open' ? 'lock-closed' : 'lock-open'} size={32} color={currentStatus === 'open' ? '#B91C1C' : '#15803D'} />
+              <Ionicons
+                name={status === 'open' ? 'lock-closed' : 'lock-open'}
+                size={32}
+                color={status === 'open' ? '#B91C1C' : '#15803D'}
+              />
             </View>
-            <Text style={styles.modalTitle}>{currentStatus === 'open' ? 'Tutup Sesi?' : 'Buka Sesi?'}</Text>
-            <Text style={styles.modalSub}>Apakah Anda yakin ingin {currentStatus === 'open' ? 'menutup' : 'membuka'} sesi praktikum ini?</Text>
+            <Text style={styles.modalTitle}>{status === 'open' ? 'Tutup Sesi?' : 'Buka Sesi?'}</Text>
+            <Text style={styles.modalSub}>
+              Apakah Anda yakin ingin {status === 'open' ? 'menutup' : 'membuka'} sesi praktikum ini?
+            </Text>
             <View style={styles.modalActions}>
               <Pressable style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setShowConfirm(false)}>
                 <Text style={styles.modalBtnCancelText}>Batal</Text>
               </Pressable>
-              <Pressable style={[styles.modalBtn, { backgroundColor: currentStatus === 'open' ? '#B91C1C' : '#15803D' }]} onPress={executeToggleStatus}>
+              <Pressable
+                style={[styles.modalBtn, { backgroundColor: status === 'open' ? '#B91C1C' : '#15803D' }]}
+                onPress={() => void executeToggle()}
+              >
                 <Text style={styles.modalBtnConfirmText}>Ya, Lanjutkan</Text>
               </Pressable>
             </View>
@@ -299,8 +460,7 @@ export default function DetailSesiScreen() {
         </View>
       </Modal>
 
-      {/* MODAL KONFIRMASI HAPUS */}
-      <Modal visible={showDeleteConfirm} transparent animationType="fade">
+      <Modal visible={showDeleteConfirm} transparent animationType="fade" onRequestClose={() => setShowDeleteConfirm(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={[styles.modalIconWrap, { backgroundColor: '#FEE2E2' }]}>
@@ -312,7 +472,7 @@ export default function DetailSesiScreen() {
               <Pressable style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setShowDeleteConfirm(false)}>
                 <Text style={styles.modalBtnCancelText}>Batal</Text>
               </Pressable>
-              <Pressable style={[styles.modalBtn, { backgroundColor: '#B91C1C' }]} onPress={executeDelete}>
+              <Pressable style={[styles.modalBtn, { backgroundColor: '#B91C1C' }]} onPress={() => void executeDelete()}>
                 <Text style={styles.modalBtnConfirmText}>Ya, Hapus</Text>
               </Pressable>
             </View>
@@ -320,29 +480,26 @@ export default function DetailSesiScreen() {
         </View>
       </Modal>
 
-      {/* MODAL FORM EDIT */}
       <SessionFormModal
         visible={showEditModal}
         mode="edit"
         initialData={{
-          courseName: kelas.courseName,
-          className: kelas.className,
-          room: kelas.room,
-          description: kelas.description || '',
-          startTime: kelas.startTime || (kelas.timeRange ? kelas.timeRange.split('-')[0].trim() : ''),
-          endTime: kelas.endTime || (kelas.timeRange ? kelas.timeRange.split('-')[1].replace('WIB', '').trim() : ''),
-          dateTimestamp: kelas.dateTimestamp,
+          courseName: session.courseName,
+          courseCode: session.courseCode,
+          classId: session.classId || undefined,
+          className: session.className,
+          room: session.room,
+          description: session.description || '',
+          startTime: session.startTime || timePart(session.timeRange, 0),
+          endTime: session.endTime || timePart(session.timeRange, 1),
+          dateTimestamp: session.dateTimestamp,
+          participantIds,
         }}
         onClose={() => setShowEditModal(false)}
         onSubmit={async (data) => {
-          try {
-            await updateSession(kelas.id, data);
-            setShowEditModal(false);
-            fetchDetail();
-            alert('Sesi berhasil diubah!');
-          } catch (error: any) {
-            alert(error.message);
-          }
+          await updateSession(session.id, data);
+          if (data.classId) await syncClassSessions(data.classId);
+          setShowEditModal(false);
         }}
       />
     </KeyboardAvoidingView>
@@ -351,6 +508,8 @@ export default function DetailSesiScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F7FA' },
+  center: { justifyContent: 'center', alignItems: 'center' },
+  centerText: { marginTop: 12, color: '#64748B' },
   inner: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 16 },
   header: { backgroundColor: '#1B2A4E', paddingBottom: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
   headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 12, maxWidth: 560, alignSelf: 'center', width: '100%' },
@@ -362,7 +521,7 @@ const styles = StyleSheet.create({
   statusChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 99, gap: 6 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 12, fontWeight: '700' },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 24, alignItems: 'center', shadowColor: '#1B2A4E', shadowOpacity: 0.05, shadowRadius: 15, shadowOffset: { width: 0, height: 5 }, elevation: 3, width: '100%' },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 24, alignItems: 'center', shadowColor: '#1B2A4E', shadowOpacity: 0.05, shadowRadius: 15, shadowOffset: { width: 0, height: 5 }, elevation: 3, width: '100%', marginBottom: 16 },
   cardIconWrap: { width: 54, height: 54, borderRadius: 16, backgroundColor: '#EEF1F6', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   dateLabel: { color: '#64748B', fontSize: 13, fontWeight: '500', marginBottom: 4 },
   sessionTitle: { color: '#1B2A4E', fontSize: 22, fontWeight: '800', marginBottom: 24, textAlign: 'center' },
@@ -376,17 +535,29 @@ const styles = StyleSheet.create({
   avatar: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 14, fontWeight: '800' },
   assistName: { color: '#1B2A4E', fontSize: 15, fontWeight: '700' },
-  button: { width: '100%', borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
+  button: { width: '100%', borderRadius: 16, paddingVertical: 16, alignItems: 'center', justifyContent: 'center', minHeight: 52 },
+  buttonOutline: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#1B2A4E' },
   buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
-  
-  // STYLE TOMBOL EDIT & HAPUS
+  infoBox: { flexDirection: 'row', gap: 8, backgroundColor: '#FFF0D4', borderRadius: 12, padding: 12, alignItems: 'flex-start' },
+  infoText: { flex: 1, color: '#8A5309', fontSize: 13, lineHeight: 19 },
+  errorBox: { flexDirection: 'row', gap: 8, backgroundColor: '#FEE2E2', borderRadius: 12, padding: 12, marginBottom: 16, alignItems: 'flex-start' },
+  errorText: { flex: 1, color: '#B91C1C', fontSize: 13, lineHeight: 19 },
   actionRow: { flexDirection: 'row', gap: 10, width: '100%' },
   actionBtnOutline: { flex: 1, flexDirection: 'row', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', gap: 6 },
   actionBtnTextOutline: { color: '#1B2A4E', fontWeight: '700', fontSize: 14 },
   actionBtnDanger: { flex: 1, flexDirection: 'row', backgroundColor: '#FEE2E2', borderRadius: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', gap: 6 },
   actionBtnTextDanger: { color: '#B91C1C', fontWeight: '700', fontSize: 14 },
-
-  // STYLE BUAT MODAL
+  sectionHead: { width: '100%', gap: 2, marginBottom: 12 },
+  sectionTitle: { color: '#1B2A4E', fontSize: 17, fontWeight: '800' },
+  sectionCount: { color: '#64748B', fontSize: 12 },
+  emptyText: { color: '#64748B', fontSize: 13, textAlign: 'center', width: '100%' },
+  attendanceRow: { flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E2E8F0' },
+  attendanceAvatar: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#E8EEF9', alignItems: 'center', justifyContent: 'center' },
+  attendanceAvatarText: { color: '#1B2A4E', fontWeight: '800', fontSize: 12 },
+  attendanceName: { color: '#1B2A4E', fontWeight: '700', fontSize: 14 },
+  attendanceNim: { color: '#64748B', fontSize: 12, marginTop: 1 },
+  attendanceBadge: { backgroundColor: '#E6F6EC', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 4 },
+  attendanceBadgeText: { color: '#15803D', fontSize: 11, fontWeight: '800' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 24, width: '100%', maxWidth: 400, alignItems: 'center' },
   modalIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
