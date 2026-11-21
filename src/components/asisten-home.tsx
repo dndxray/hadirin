@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, onSnapshot } from 'firebase/firestore';
 
 import { authColors } from '@/components/auth-ui';
 import { StateView } from '@/components/state-view';
@@ -11,7 +11,8 @@ import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { getSessionStatus } from '@/utils/session-status';
 import { SessionFormModal } from '../../features/asisten/components/SessionFormModal';
-import { createSession } from '@/services/assistant-service';
+import { createSession, syncSessionStatuses } from '@/services/assistant-service';
+import { hasRole } from '@/utils/roles';
 
 const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const MONTHS = [
@@ -66,15 +67,15 @@ export function AsistenHome() {
       const classData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setClasses(classData);
       setLoading(false);
+      void syncSessionStatuses(classData);
     }, (error) => {
       console.error("Gagal load sesi:", error);
       setLoading(false);
     });
 
-    const usersRef = collection(db, 'users');
-    const qUsers = query(usersRef, where('role', '==', 'praktikan'));
-    const unsubUsers = onSnapshot(qUsers, (snapshot) => {
-      setTotalPraktikan(snapshot.size);
+    const unsubUsers = onSnapshot(query(collection(db, 'users')), (snapshot) => {
+      const total = snapshot.docs.filter((item) => hasRole(item.data(), 'praktikan')).length;
+      setTotalPraktikan(total);
     });
 
     return () => {

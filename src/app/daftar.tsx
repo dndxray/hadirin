@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
-import { collection, query, where, getDocs } from 'firebase/firestore'; // Import firestore
 
 import {
   AuthButton,
@@ -11,10 +10,9 @@ import {
   AuthShell,
   authColors,
 } from '@/components/auth-ui';
-import { useApp } from '@/context/app-context';
 import { authErrorMessage, useAuth } from '@/context/auth-context';
-import { db } from '@/lib/firebase'; // Import db
 import type { Role } from '@/types/attendance';
+import { validateNim } from '@/utils/nim';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,10 +23,10 @@ const roleOptions: { value: Role; label: string; icon: 'school-outline' | 'clipb
 
 export default function DaftarScreen() {
   const { register } = useAuth();
-  const { login: setDummyUser } = useApp();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [nim, setNim] = useState('');
   const [role, setRole] = useState<Role>('praktikan');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -37,33 +35,25 @@ export default function DaftarScreen() {
     if (!name.trim()) return setError('Nama wajib diisi.');
     if (!EMAIL_REGEX.test(email.trim())) return setError('Format email tidak valid.');
     if (password.length < 6) return setError('Kata sandi minimal 6 karakter.');
+    if (role === 'praktikan') {
+      const invalidNim = validateNim(nim);
+      if (invalidNim) return setError(invalidNim);
+    }
 
     setError(null);
     setSubmitting(true);
     try {
-      // ===== LOGIKA VALIDASI ASISTEN =====
-      if (role === 'asisten') {
-        const q = query(
-          collection(db, 'asisten_whitelist'), 
-          where('email', '==', email.trim().toLowerCase())
-        );
-        const snap = await getDocs(q);
-        
-        if (snap.empty) {
-          throw new Error('Email ini belum terdaftar sebagai Asisten. Silakan hubungi Admin/PM.');
-        }
-      }
-      // ===================================
+      const created = await register(
+        name,
+        email,
+        password,
+        role,
+        role === 'praktikan' ? nim : undefined,
+      );
 
-      const p = await register(name, email, password, role);
-      setDummyUser(p.role);
-      router.replace(p.role === 'asisten' ? '/jadwal' : '/presensi');
-    } catch (e: any) {
-      if (e.message.includes('belum terdaftar')) {
-        setError(e.message);
-      } else {
-        setError(authErrorMessage(e));
-      }
+      router.replace(created.role === 'asisten' && created.approvalStatus === 'pending' ? '/pending' : '/home');
+    } catch (e) {
+      setError(e instanceof Error && !('code' in e) ? e.message : authErrorMessage(e));
     } finally {
       setSubmitting(false);
     }
@@ -91,6 +81,19 @@ export default function DaftarScreen() {
         onChangeText={setName}
         placeholder="Nama lengkap"
       />
+      {role === 'praktikan' ? (
+        <AuthField
+          label="NIM"
+          icon="id-card-outline"
+          value={nim}
+          onChangeText={setNim}
+          placeholder="14 angka"
+          keyboardType="number-pad"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={14}
+        />
+      ) : null}
       <AuthField
         label="Email"
         icon="mail-outline"

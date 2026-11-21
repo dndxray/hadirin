@@ -57,7 +57,7 @@ export function DecisionModal({
     >
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         <Pressable style={styles.backdrop} onPress={onCancel} />
 

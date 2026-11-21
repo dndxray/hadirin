@@ -10,5 +10,5 @@ export default function Index() {
     return <Redirect href="/pending" />;
   }
 
-  return <Redirect href={profile.role === 'asisten' ? '/home' : '/presensi'} />;
+  return <Redirect href="/home" />;
 }

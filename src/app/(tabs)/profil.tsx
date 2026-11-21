@@ -1,14 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AuthButton, AuthError, AuthField, authColors } from '@/components/auth-ui';
 import { StateView } from '@/components/state-view';
+import { BottomTabInset } from '@/constants/theme';
 import { useApp } from '@/context/app-context';
 import { useAuth } from '@/context/auth-context';
 import { firebaseErrorMessage } from '@/utils/firebase-error';
 import { validateNim } from '@/utils/nim';
+import { hasRole, roleLabel } from '@/utils/roles';
 
 export default function ProfilScreen() {
   const insets = useSafeAreaInsets();
@@ -19,13 +21,14 @@ export default function ProfilScreen() {
   const [nim, setNim] = useState('');
   const [savingNim, setSavingNim] = useState(false);
   const [nimError, setNimError] = useState<string | null>(null);
+  const [editingNim, setEditingNim] = useState(false);
 
   const handleSaveNim = async () => {
     const invalid = validateNim(nim);
     if (invalid) { setNimError(invalid); return; }
     setNimError(null);
     setSavingNim(true);
-    try { await saveNim(nim); }
+    try { await saveNim(nim); setEditingNim(false); }
     catch (failure) { setNimError(firebaseErrorMessage(failure)); }
     finally { setSavingNim(false); }
   };
@@ -58,13 +61,19 @@ export default function ProfilScreen() {
   }
 
   const isAsisten = currentUser.role === 'asisten';
-  const roleLabel = isAsisten ? 'Asisten Praktikum' : 'Praktikan';
+  const activeRoleLabel = isAsisten ? 'Asisten Praktikum' : 'Praktikan';
+  const isPraktikanAccount = hasRole(profile, 'praktikan');
+  const rolesText = (profile?.roles?.length ? profile.roles : ['praktikan' as const])
+    .map((item) => roleLabel(item))
+    .join(' · ');
   const initial = currentUser.name?.charAt(0).toUpperCase() || '?';
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView style={styles.screen} behavior="padding">
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + BottomTabInset + 40 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.header, { paddingTop: insets.top + 28 }]}>
@@ -75,7 +84,7 @@ export default function ProfilScreen() {
             </View>
             <Text style={styles.name}>{currentUser.name}</Text>
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{roleLabel}</Text>
+              <Text style={styles.badgeText}>{activeRoleLabel}</Text>
             </View>
           </View>
         </View>
@@ -87,22 +96,38 @@ export default function ProfilScreen() {
               <View style={styles.divider} />
               <InfoRow icon="mail-outline" label="Email" value={currentUser.identifier} />
               <View style={styles.divider} />
-              {!isAsisten ? <>
+              {isPraktikanAccount ? <>
                 <InfoRow icon="card-outline" label="NIM" value={profile?.nim || 'Belum diisi'} />
                 <View style={styles.divider} />
               </> : null}
-              <InfoRow icon="shield-checkmark-outline" label="Peran" value={roleLabel} />
+              <InfoRow icon="shield-checkmark-outline" label="Peran" value={rolesText} />
             </View>
 
-            {!isAsisten && !profile?.nim ? <View style={styles.nimForm}>
-              <Text style={styles.nimTitle}>Lengkapi NIM</Text>
+            {isPraktikanAccount && (!profile?.nim || editingNim) ? <View style={styles.nimForm}>
+              <Text style={styles.nimTitle}>{profile?.nim ? 'Ubah NIM' : 'Lengkapi NIM'}</Text>
               <Text style={styles.nimHint}>Asisten menggunakan NIM untuk mencari akunmu dan menambahkanmu ke sesi.</Text>
               <AuthField label="NIM" icon="card-outline" value={nim} onChangeText={setNim}
-                editable={!savingNim} placeholder="Contoh: 123456789" autoCapitalize="characters" autoCorrect={false} maxLength={30} />
-              <Text style={styles.nimHint}>Periksa sebelum menyimpan. NIM yang sudah tersimpan hanya dapat diperbaiki oleh pengelola.</Text>
+                editable={!savingNim} placeholder="14 angka" keyboardType="number-pad"
+                autoCapitalize="characters" autoCorrect={false} maxLength={14} />
+              <Text style={styles.nimHint}>Periksa sebelum menyimpan. NIM dipakai asisten untuk mencarimu.</Text>
               <AuthError message={nimError} />
               <AuthButton title="Simpan NIM" loading={savingNim} onPress={() => void handleSaveNim()} />
+              {profile?.nim ? (
+                <Pressable onPress={() => { setEditingNim(false); setNim(''); setNimError(null); }}>
+                  <Text style={styles.nimCancel}>Batal</Text>
+                </Pressable>
+              ) : null}
             </View> : null}
+
+            {isPraktikanAccount && profile?.nim && !editingNim ? (
+              <Pressable
+                onPress={() => { setNim(profile.nim ?? ''); setNimError(null); setEditingNim(true); }}
+                style={styles.nimEdit}
+              >
+                <Ionicons name="create-outline" size={18} color={authColors.navy} />
+                <Text style={styles.nimEditText}>Ubah NIM</Text>
+              </Pressable>
+            ) : null}
 
             <AuthError message={error} />
 
@@ -123,7 +148,7 @@ export default function ProfilScreen() {
           </View>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -194,6 +219,19 @@ const styles = StyleSheet.create({
   nimForm: { backgroundColor: authColors.white, borderRadius: 20, padding: 20, gap: 14 },
   nimTitle: { color: authColors.navy, fontSize: 18, fontWeight: '800' },
   nimHint: { color: '#52627A', fontSize: 14, lineHeight: 21 },
+  nimCancel: { color: authColors.muted, fontSize: 14, fontWeight: '700', textAlign: 'center', paddingVertical: 4 },
+  nimEdit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: authColors.border,
+    backgroundColor: authColors.white,
+  },
+  nimEditText: { color: authColors.navy, fontSize: 14, fontWeight: '700' },
   card: {
     backgroundColor: authColors.white,
     borderRadius: 20,

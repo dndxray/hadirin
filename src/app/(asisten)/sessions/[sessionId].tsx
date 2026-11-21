@@ -7,7 +7,6 @@ import {
   View,
   Pressable,
   KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -256,7 +255,7 @@ export default function SessionDetailScreen() {
         </View>
       </View>
 
-      <SessionEnrollment sessionId={session.id} participantIds={session.participantIds} />
+      <SessionEnrollment classId={(session as any).classId} />
 
       {actionError ? (
         <View style={styles.errorBanner}>
@@ -366,7 +365,7 @@ export default function SessionDetailScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       <FlatList
         data={filteredAttendances}

@@ -3,7 +3,6 @@ import { useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -44,7 +43,7 @@ export function AuthShell({ eyebrow, title, subtitle, children, footer }: ShellP
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       <View style={styles.circle} />
       <ScrollView

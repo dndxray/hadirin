@@ -8,7 +8,7 @@ export type AttendanceModalPhase = 'closed' | 'confirm' | 'success' | 'duplicate
 
 type AttendanceConfirmationModalProps = {
   phase: AttendanceModalPhase;
-  session: PracticeSession;
+  session?: PracticeSession;
   attendanceTime?: string;
   busy?: boolean;
   onClose: () => void;
@@ -31,7 +31,7 @@ export function AttendanceConfirmationModal({
   const heading = isConfirm
     ? 'Konfirmasi Presensi'
     : isSuccess
-      ? 'Presensi Berhasil'
+      ? 'Presensi Berhasil!'
       : phase === 'duplicate'
         ? 'Presensi Sudah Tercatat'
         : 'Sesi Tidak Tersedia';
