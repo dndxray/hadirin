@@ -33,21 +33,9 @@ export default function AsistenLayout() {
       }}
     >
       <Stack.Screen
-        name="index"
-        options={{
-          title: 'Jadwal Praktikum',
-        }}
-      />
-      <Stack.Screen
         name="sessions/[sessionId]"
         options={{
           title: 'Detail Sesi',
-        }}
-      />
-      <Stack.Screen
-        name="permissions/index"
-        options={{
-          title: 'Pemeriksaan Izin',
         }}
       />
     </Stack>
