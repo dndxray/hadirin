@@ -474,10 +474,12 @@ export async function processPendingPermissionAi(
     let pending: Pick<PermissionRequestItem, 'id' | 'reason' | 'ai'>[];
 
     if (requests) {
-      pending = requests.filter((item) => item.ai.status === 'pending');
+      pending = requests.filter(
+        (item) => item.ai.status === 'pending' || item.ai.status === 'failed'
+      );
     } else {
       const snapshot = await getDocs(
-        query(collection(db, 'permissionRequests'), where('ai.status', '==', 'pending'))
+        query(collection(db, 'permissionRequests'), where('ai.status', 'in', ['pending', 'failed']))
       );
       pending = snapshot.docs.map((document) => {
         const raw = document.data();
@@ -507,6 +509,35 @@ export async function processPendingPermissionAi(
   } catch {
     // A failed query/listener must not block the permission list.
   }
+}
+
+export function subscribePendingPermissionAiAutoProcessor(): Unsubscribe {
+  const user = auth?.currentUser;
+  if (!user || !db) return () => {};
+
+  const q = query(
+    collection(db, 'permissionRequests'),
+    where('ai.status', 'in', ['pending', 'failed'])
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      if (snapshot.empty) return;
+      const pending = snapshot.docs.map((document) => {
+        const raw = document.data();
+        return {
+          id: document.id,
+          reason: String(raw.reason ?? ''),
+          ai: raw.ai ?? { status: 'pending' },
+        };
+      });
+      void processPendingPermissionAi(pending);
+    },
+    () => {
+      // Ignore background listener errors safely
+    }
+  );
 }
 
 export async function decidePermissionRequest(
