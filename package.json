@@ -47,7 +47,10 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test:unit": "node --test tests/attendance-location.test.mjs tests/device-location.test.mjs tests/device-notifications.test.mjs tests/sentiment.test.mjs",
+    "test:rules": "node --test tests/firestore.rules.test.mjs",
+    "test:sprint3:web": "node tests/sprint-three-fixture.mjs seed && python tests/sprint-three-ui.py"
   },
   "private": true
 }
