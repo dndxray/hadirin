@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { authColors } from '@/components/auth-ui';
 import type { PracticeSession } from '@/types/attendance';
@@ -18,6 +18,7 @@ type AttendanceConfirmationModalProps = {
 
 export function AttendanceConfirmationModal({
   phase,
+  session,
   attendanceTime,
   busy = false,
   onClose,
@@ -37,7 +38,7 @@ export function AttendanceConfirmationModal({
         : 'Sesi Tidak Tersedia';
 
   const message = isConfirm
-    ? 'Apakah Anda yakin ingin melakukan presensi?'
+    ? session ? `Catat kehadiran untuk ${session.courseName} · ${session.className}? Lokasi akan diperiksa ulang sebelum disimpan.` : 'Apakah Anda yakin ingin melakukan presensi?'
     : isSuccess
       ? attendanceTime ? `Kehadiranmu tercatat pada ${attendanceTime}.` : 'Kehadiran tersimpan. Waktu server akan muncul di riwayat.'
       : phase === 'duplicate'
@@ -54,12 +55,12 @@ export function AttendanceConfirmationModal({
   return (
     <Modal
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={() => { if (!busy) onClose(); }}
       statusBarTranslucent
       transparent
       visible={phase !== 'closed'}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable style={styles.overlay} onPress={() => { if (!busy) onClose(); }}>
         <Pressable style={styles.sheet} onPress={() => {}} accessibilityViewIsModal>
           <View style={styles.grabber} />
 
@@ -79,12 +80,13 @@ export function AttendanceConfirmationModal({
           <Text style={styles.heading}>{heading}</Text>
           <Text style={styles.message}>{message}</Text>
 
-          <Pressable style={styles.primary} onPress={primaryAction}>
-            <Text style={styles.primaryText}>{primaryLabel}</Text>
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy, busy }} disabled={busy} style={styles.primary} onPress={primaryAction}>
+            {busy ? <ActivityIndicator color={authColors.white} /> : null}
+            <Text style={styles.primaryText}>{busy ? 'Memvalidasi dan menyimpan…' : primaryLabel}</Text>
           </Pressable>
 
           {isConfirm || isSuccess ? (
-            <Pressable style={styles.secondary} onPress={onClose}>
+            <Pressable accessibilityRole="button" disabled={busy} style={styles.secondary} onPress={onClose}>
               <Text style={styles.secondaryText}>{isConfirm ? 'Nanti Saja' : 'Tutup'}</Text>
             </Pressable>
           ) : null}

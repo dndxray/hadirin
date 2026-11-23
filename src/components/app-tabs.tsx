@@ -54,6 +54,9 @@ export default function AppTabs() {
               <TabTrigger name="explore" href="/explore" asChild>
                 <TabButton icon="clipboard" label="Riwayat" />
               </TabTrigger>
+              <TabTrigger name="presensi" href="/presensi" asChild>
+                <TabButton icon="location" label="Presensi" />
+              </TabTrigger>
             </>
           )}
 
