@@ -1,6 +1,6 @@
 # Sprint 3 Caesar: Presensi, Lokasi, QR, dan Penerimaan Push
 
-Branch: `feature/caesar-sprint-3-presensi-notifikasi`, berangkat dari `main` `3498c72` pada 23 November 2026. PM Sprint 3: Fadhil. Tidak ada push, perubahan Firebase Console, atau deployment Rules dalam pengerjaan ini.
+Branch: `feature/location-attendance-and-notifications`, berangkat dari `main` `3498c72` pada 23 November 2026. PM Sprint 3: Fadhil. Tidak ada push, perubahan Firebase Console, atau deployment Rules dalam pengerjaan ini.
 
 ## Cakupan implementasi
 
@@ -112,7 +112,22 @@ Jenis `data.type`: `session_opened` / `session_updated` menuju `/presensi?sessio
 
 [Expo Location SDK 58](https://docs.expo.dev/versions/v58.0.0/sdk/location/), [Camera SDK 58](https://docs.expo.dev/versions/v58.0.0/sdk/camera/), [Notifications SDK 58](https://docs.expo.dev/versions/v58.0.0/sdk/notifications/), [Rules LatLng.distance](https://firebase.google.com/docs/reference/rules/rules.LatLng#distance).
 
-## Verifikasi dan cara mengulang
+## Cara mencoba sekarang: web terlebih dahulu
+
+```bash
+npx expo start --web --clear
+```
+
+Gunakan konfigurasi Firebase yang sudah ada dan akun sendiri. Tidak perlu membuat akun/data demo atau menyalakan emulator untuk mencoba manual. Perubahan data dari aplikasi ini tetap menuju Firebase tim; jangan menghapus atau mengubah data pengguna lain untuk pengujian.
+
+- Halaman Presensi, navigasi dari detail, informasi sesi, feedback kegagalan, dan Riwayat dapat diperiksa sekarang. Lokasi/kamera browser memerlukan izin, perangkat yang mendukung, serta `localhost` atau HTTPS.
+- Agar presensi benar-benar tersimpan, dibutuhkan lab valid, `sessions.labId`, status `open`, UID peserta dalam sesi, serta Rules Sprint 3 yang sudah diterapkan. Form Dinda/Elza tidak harus selesai jika data nyata tersebut sudah disiapkan oleh pihak berwenang sesuai kontrak; branch ini tidak mengisinya otomatis.
+- QR dapat diuji dengan QR valid untuk sesi nyata dan nonce yang cocok, tanpa menunggu halaman penampil QR asisten. Tanpa data tersebut, yang dapat diuji baru penanganan kamera/payload salah.
+- Push Expo native tidak dapat dibuktikan melalui web. Penerima dapat diuji terpisah dari otomatisasi Elza lewat kiriman uji setelah development build baru dan kredensial layanan siap. Jangan menganggap pengiriman event sudah tersedia dari branch Caesar.
+
+Untuk pemeriksaan berikutnya, prioritaskan web dengan proyek/data yang sudah ada. Gunakan perangkat fisik untuk kemampuan native; suite terisolasi di bawah adalah pilihan tambahan, bukan prasyarat mencoba aplikasi.
+
+## Verifikasi otomatis (opsional)
 
 ```bash
 npm run test:unit
