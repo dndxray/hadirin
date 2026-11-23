@@ -26,6 +26,17 @@
     },
     "plugins": [
       "expo-router",
+      ["expo-location", {
+        "locationWhenInUsePermission": "Hadirin menggunakan lokasi saat halaman presensi dibuka untuk memeriksa radius laboratorium."
+      }],
+      ["expo-camera", {
+        "cameraPermission": "Hadirin menggunakan kamera untuk memindai QR presensi sesi praktikum.",
+        "recordAudioAndroid": false
+      }],
+      "expo-notifications",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser",
       [
         "expo-splash-screen",
         {
