@@ -22,6 +22,7 @@ import {
 import { auth, db } from '@/lib/firebase';
 import type { Role } from '@/types/attendance';
 import { saveOwnNim } from '@/services/enrollment-service';
+import { unregisterPushTokenForCurrentUser } from '@/services/push-registration';
 import { normalizeNim, validateNim } from '@/utils/nim';
 import { roleList } from '@/utils/roles';
 
@@ -278,6 +279,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const logout = useCallback(async () => {
+    await unregisterPushTokenForCurrentUser();
     await signOut(auth);
     await AsyncStorage.removeItem(ACTIVE_ROLE_KEY);
     setProfile(null);

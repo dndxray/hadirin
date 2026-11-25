@@ -1,6 +1,11 @@
 import type { PracticeSession } from './attendance';
 
-export type CloudSession = PracticeSession & { participantIds: string[] };
+export type CloudSession = PracticeSession & {
+  participantIds: string[];
+  labId?: string;
+  attendanceRadiusMeters?: number;
+  qrToken?: string;
+};
 export type SessionSummary = Pick<PracticeSession, 'courseName' | 'className' | 'dateLabel' | 'timeRange' | 'room' | 'assistantName'>;
 export type CloudAttendance = {
   id: string;

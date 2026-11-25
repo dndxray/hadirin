@@ -24,18 +24,24 @@ service cloud.firestore {
       return !('nim' in data) || (data.nim is string && data.nim.matches('^[A-Z0-9][A-Z0-9._/-]{2,29}$'));
     }
 
+    function validPushTokens(data) {
+      return data.get('expoPushTokens', []) is list && data.get('expoPushTokens', []).size() <= 20;
+    }
+
     // Profil akun
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAsisten());
       allow create: if signedIn() && request.auth.uid == uid
                     && request.resource.data.role in ['asisten', 'praktikan']
                     && validNim(request.resource.data)
+                    && validPushTokens(request.resource.data)
                     && request.resource.data.get('roles', [request.resource.data.role]).hasOnly(['praktikan', 'asisten'])
                     && (!('asisten' in request.resource.data.get('roles', []))
                         || request.resource.data.get('approvalStatus', '') == 'pending');
       allow update: if signedIn() && request.auth.uid == uid
                     && request.resource.data.role == resource.data.role
                     && validNim(request.resource.data)
+                    && validPushTokens(request.resource.data)
                     && (!('nim' in resource.data) || resource.data.nim == '' || request.resource.data.nim == resource.data.nim)
                     && request.resource.data.get('roles', [resource.data.role]).hasOnly(['praktikan', 'asisten'])
                     && (!('asisten' in request.resource.data.get('roles', []))
@@ -76,6 +82,39 @@ service cloud.firestore {
       };
     }
 
+    function validLab(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 120
+        && data.latitude is number && data.latitude >= -90 && data.latitude <= 90
+        && data.longitude is number && data.longitude >= -180 && data.longitude <= 180
+        && data.radiusMeters is number && data.radiusMeters >= 1 && data.radiusMeters <= 1000;
+    }
+
+    match /labs/{id} {
+      allow read: if signedIn();
+      allow create, update: if isAsisten() && validLab(request.resource.data);
+      allow delete: if isAsisten();
+    }
+
+    function validAttendanceLocation(data) {
+      let s = sessionData(data.sessionId);
+      let lab = get(/databases/$(database)/documents/labs/$(s.labId)).data;
+      let radius = s.get('attendanceRadiusMeters', lab.radiusMeters);
+      let location = data.location;
+      return validLab(lab) && data.labId == s.labId
+        && radius is number && radius >= 1 && radius <= 1000
+        && location.keys().hasOnly(['point', 'accuracy', 'observedAt'])
+        && location.point is latlng
+        && location.accuracy is number && location.accuracy >= 0
+        && location.accuracy <= 50 && location.accuracy <= radius
+        && location.observedAt is timestamp
+        && location.observedAt >= request.time - duration.value(30, 's')
+        && location.observedAt <= request.time + duration.value(5, 's')
+        && location.point.distance(latlng.value(lab.latitude, lab.longitude)) <= radius
+        && (data.method == 'location' && !('qrToken' in data)
+          || data.method == 'qr' && s.qrToken is string
+            && s.qrToken.matches('^[A-Za-z0-9_-]{16,128}$') && data.qrToken == s.qrToken);
+    }
+
     // Sesi Praktikum
     match /sessions/{id} {
       allow read: if isAsisten() || (isPraktikan() && request.auth.uid in resource.data.participantIds);
@@ -88,13 +127,15 @@ service cloud.firestore {
         (!exists(/databases/$(database)/documents/attendance/$(id)) || resource.data.practitionerId == request.auth.uid));
       allow list: if isAsisten() || (isPraktikan() && resource.data.practitionerId == request.auth.uid);
       allow create: if isPraktikan()
-        && request.resource.data.keys().hasOnly(['sessionId', 'practitionerId', 'checkedInAt', 'session'])
+        && request.resource.data.keys().hasOnly(['sessionId', 'practitionerId', 'checkedInAt', 'session', 'labId', 'method', 'location', 'qrToken'])
+        && request.resource.data.keys().hasAll(['sessionId', 'practitionerId', 'checkedInAt', 'session', 'labId', 'method', 'location'])
         && request.resource.data.practitionerId == request.auth.uid
         && id == request.resource.data.sessionId + '_' + request.auth.uid
         && participant(request.resource.data.sessionId)
         && sessionData(request.resource.data.sessionId).status == 'open'
         && request.resource.data.checkedInAt == request.time
         && validSummary(request.resource.data)
+        && validAttendanceLocation(request.resource.data)
         && !existsAfter(/databases/$(database)/documents/permissionRequests/$(id));
       allow update, delete: if false;
     }

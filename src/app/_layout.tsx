@@ -13,6 +13,7 @@ import { authColors } from '@/components/auth-ui';
 import { AppProvider } from '@/context/app-context';
 import { AttendanceProvider } from '@/context/attendance-context';
 import { AuthProvider, useAuth } from '@/context/auth-context';
+import { NotificationProvider } from '@/context/notification-context';
 import { AsistenProvider } from '../../features/asisten/AsistenContext';
 
 SplashScreen.preventAutoHideAsync();
@@ -69,12 +70,14 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthProvider>
         <AppProvider>
-          <AttendanceProvider>
-            <AsistenProvider>
-              <AnimatedSplashOverlay />
-              <RootNavigator />
-            </AsistenProvider>
-          </AttendanceProvider>
+          <NotificationProvider>
+            <AttendanceProvider>
+              <AsistenProvider>
+                <AnimatedSplashOverlay />
+                <RootNavigator />
+              </AsistenProvider>
+            </AttendanceProvider>
+          </NotificationProvider>
         </AppProvider>
       </AuthProvider>
     </ThemeProvider>

@@ -5,6 +5,7 @@ import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { recordParticipation } from '@/services/practitioner-service';
 import type { CloudAttendance, CloudSession, PermissionRequest } from '@/types/practitioner';
+import type { CheckInEvidence } from '@/types/sprint-three';
 import { firebaseErrorMessage } from '@/utils/firebase-error';
 
 type Resource<T> = { data: T[]; loading: boolean; error: string | null; fromCache: boolean };
@@ -41,7 +42,7 @@ type Value = {
   sessionState: Resource<CloudSession>;
   attendanceState: Resource<CloudAttendance>;
   permissionState: Resource<PermissionRequest>;
-  checkIn: (id: string) => Promise<string>;
+  checkIn: (id: string, evidence: CheckInEvidence) => Promise<string>;
   submitPermission: (id: string, reason: string) => Promise<string>;
   hasAttended: (id: string) => boolean;
   retry: () => void;
@@ -66,7 +67,7 @@ function Subscriptions({ uid, retry, children }: PropsWithChildren<{ uid?: strin
   return <Context.Provider value={{
     sessions: sessionState.data, records: attendanceState.data, permissions: permissionState.data,
     sessionState, attendanceState, permissionState, hasAttended, retry,
-    checkIn: (id) => recordParticipation(id),
+    checkIn: (id, evidence) => recordParticipation(id, undefined, evidence),
     submitPermission: (id, reason) => recordParticipation(id, reason),
   }}>{children}</Context.Provider>;
 }
