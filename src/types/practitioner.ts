@@ -4,6 +4,8 @@ export type CloudSession = PracticeSession & {
   participantIds: string[];
   labId?: string;
   radiusM?: number;
+  attendanceRadiusMeters?: number;
+  qrToken?: string;
 };
 export type SessionSummary = Pick<PracticeSession, 'courseName' | 'className' | 'dateLabel' | 'timeRange' | 'room' | 'assistantName'>;
 export type CloudAttendance = {

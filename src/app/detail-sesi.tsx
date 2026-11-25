@@ -14,7 +14,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, onSnapshot } from 'firebase/firestore';
 
-import { AttendanceConfirmationModal, type AttendanceModalPhase } from '@/components/attendance-confirmation-modal';
 import { SessionEnrollment } from '@/components/session-enrollment';
 import { StateView } from '@/components/state-view';
 import { useAttendance } from '@/context/attendance-context';
@@ -32,7 +31,6 @@ import { initials } from '@/utils/home-format';
 import { getSessionStatus, isSessionFinished } from '@/utils/session-status';
 import { SessionFormModal } from '../../features/asisten/components/SessionFormModal';
 import { SessionQRModal } from '../../features/asisten/components/SessionQRModal';
-import { AttendanceQRScannerModal } from '@/components/attendance-qr-scanner-modal';
 import { notifyUsers } from '@/services/notification-service';
 import type { Attendance } from '../../features/asisten/types';
 
@@ -48,7 +46,7 @@ export default function DetailSesiScreen() {
   const sessionId = Array.isArray(params.id) ? params.id[0] : params.id;
 
   const { profile, loading: authLoading } = useAuth();
-  const { records, permissions, checkIn } = useAttendance();
+  const { records, permissions } = useAttendance();
 
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -59,13 +57,11 @@ export default function DetailSesiScreen() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showQR, setShowQR] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
 
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [roster, setRoster] = useState<{ nim: string; name: string }[]>([]);
 
-  const [phase, setPhase] = useState<AttendanceModalPhase>('closed');
 
   const isAsisten = profile?.role === 'asisten';
   const classId: string = session?.classId ?? '';
@@ -188,19 +184,6 @@ export default function DetailSesiScreen() {
       ? 'Sesi Telah Berakhir'
       : 'Buka Sesi Praktikum';
 
-  const presensiLabel = attended
-    ? 'Presensi Tercatat'
-    : requested
-      ? 'Izin Sudah Diajukan'
-      : !isParticipant
-        ? 'Bukan Peserta Sesi'
-        : status === 'upcoming'
-          ? 'Sesi Belum Dibuka'
-          : status === 'closed'
-            ? 'Sesi Telah Ditutup'
-            : 'Isi Presensi';
-
-  const canPresensi = isParticipant && !attended && !requested && status === 'open';
 
   async function executeToggle() {
     setShowConfirm(false);
@@ -236,25 +219,6 @@ export default function DetailSesiScreen() {
     }
   }
 
-  async function confirmPresensi() {
-    setBusy(true);
-    try {
-      await checkIn(session.id);
-      setPhase('success');
-    } catch (failure) {
-      const message = firebaseErrorMessage(failure);
-      if (/sudah tercatat/i.test(message)) {
-        setPhase('duplicate');
-      } else if (/belum dibuka|sudah ditutup/i.test(message)) {
-        setPhase('unavailable');
-      } else {
-        setPhase('closed');
-        setError(message);
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <KeyboardAvoidingView style={styles.screen} behavior="padding">
@@ -370,15 +334,16 @@ export default function DetailSesiScreen() {
                 ) : null}
 
                 <Pressable
-                  onPress={() => setShowScanner(true)}
-                  disabled={!canPresensi || busy}
+                  accessibilityRole="button"
+                  onPress={() => router.push({ pathname: '/presensi', params: { sessionId: session.id } })}
+                  disabled={!isParticipant || busy}
                   style={({ pressed }) => [
                     styles.button,
-                    { backgroundColor: canPresensi ? '#1B2A4E' : '#E2E8F0' },
-                    pressed && canPresensi && { opacity: 0.85 },
+                    { backgroundColor: isParticipant ? '#1B2A4E' : '#E2E8F0' },
+                    pressed && isParticipant && { opacity: 0.85 },
                   ]}
                 >
-                  <Text style={[styles.buttonText, !canPresensi && { color: '#64748B' }]}>{presensiLabel}</Text>
+                  <Text style={[styles.buttonText, !isParticipant && { color: '#64748B' }]}>{isParticipant ? 'Buka halaman Presensi' : 'Bukan peserta sesi'}</Text>
                 </Pressable>
 
                 <Pressable
@@ -446,23 +411,6 @@ export default function DetailSesiScreen() {
         </View>
       </ScrollView>
 
-      <AttendanceConfirmationModal
-        phase={phase}
-        busy={busy}
-        onClose={() => setPhase('closed')}
-        onConfirm={() => void confirmPresensi()}
-        onViewHistory={() => { setPhase('closed'); router.push('/explore'); }}
-      />
-
-      <AttendanceQRScannerModal
-        visible={showScanner}
-        sessionId={session.id}
-        onScanned={() => {
-          setShowScanner(false);
-          setPhase('confirm');
-        }}
-        onClose={() => setShowScanner(false)}
-      />
 
       <SessionQRModal
         visible={showQR}

@@ -1,30 +1,22 @@
 import { readFileSync } from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-import ts from 'typescript';
+import { loadTypescript } from './helpers/load-typescript.mjs';
 import * as firestore from 'firebase/firestore';
+firestore.setLogLevel('silent'); // Permission-denied cases are asserted, not application failures.
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
 
 let env;
 const session = { courseName: 'PPK', className: 'A', dateLabel: '12 November 2026', timeRange: '13.00–15.00 WIB', room: 'Lab', assistantName: 'Fadhil' };
-const attendance = (uid = 'caesar', sessionId = 'open') => ({ sessionId, practitionerId: uid, checkedInAt: serverTimestamp(), session });
+const lab = { name: 'Lab Uji', latitude: -7.05, longitude: 110.44, radiusMeters: 100 };
+const evidence = () => ({ method: 'location', position: { latitude: lab.latitude, longitude: lab.longitude, accuracy: 5, timestamp: Date.now() } });
+const attendance = (uid = 'caesar', sessionId = 'open') => ({ sessionId, practitionerId: uid, checkedInAt: serverTimestamp(), session,
+  labId: 'lab-a', method: 'location', location: { point: new firestore.GeoPoint(lab.latitude, lab.longitude), accuracy: 5, observedAt: firestore.Timestamp.now() } });
 const permission = (uid = 'caesar', sessionId = 'open') => ({ sessionId, practitionerId: uid, createdAt: serverTimestamp(), session, reason: 'Saya sedang sakit dan perlu beristirahat.', status: 'pending', ai: { status: 'pending' } });
 const db = (uid = 'caesar') => env.authenticatedContext(uid).firestore();
-const require = createRequire(import.meta.url);
 function service(store, uid = 'caesar', source = 'src/services/practitioner-service.ts') {
-  const output = ts.transpileModule(readFileSync(source, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const module = { exports: {} };
-  new Function('require', 'exports', 'module', output)(
-    (name) => name === '@/lib/firebase' ? { db: store, auth: { currentUser: { uid } } }
-      : name === '@/utils/nim' ? service(store, uid, 'src/utils/nim.ts')
-      : name === 'firebase/firestore' ? firestore : require(name),
-    module.exports, module,
-  );
-  return module.exports;
+  return loadTypescript(source, { '@/lib/firebase': { db: store, auth: { currentUser: { uid } } }, 'firebase/firestore': firestore });
 }
 before(async () => {
   env = await initializeTestEnvironment({ projectId: 'demo-hadirin', firestore: { host: '127.0.0.1', port: 8085, rules: readFileSync('firestore.rules', 'utf8') } });
@@ -33,73 +25,143 @@ beforeEach(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (context) => {
     const store = context.firestore();
+    await setDoc(doc(store, 'labs', 'lab-a'), lab);
     await Promise.all(['caesar', 'other', 'outsider', 'assistant'].map((uid) => setDoc(doc(store, 'users', uid), { role: uid === 'assistant' ? 'asisten' : 'praktikan' })));
-    await Promise.all(['open', 'upcoming', 'closed'].map((status) => setDoc(doc(store, 'sessions', status), { ...session, status, participantIds: ['caesar', 'other'] })));
+    await Promise.all(['open', 'upcoming', 'closed'].map((status) => setDoc(doc(store, 'sessions', status), {
+      ...session, status, participantIds: ['caesar', 'other'], labId: 'lab-a', qrToken: '0123456789abcdef',
+    })));
   });
 });
 after(async () => { await env?.cleanup(); });
 
 const enrollment = (uid = 'assistant') => service(db(uid), uid, 'src/services/enrollment-service.ts');
 
+test('SRS-28: rules menolak presensi tanpa lokasi dan menghitung radius sendiri', async () => {
+  const store = db();
+  const ref = doc(store, 'attendance', 'open_caesar');
+  const old = attendance();
+  delete old.location;
+  await assertFails(setDoc(ref, old));
+  for (const [latitude, longitude] of [[lab.latitude + 0.01, lab.longitude], [lab.latitude + 0.0007, lab.longitude + 0.0007]]) {
+    await assertFails(setDoc(ref, { ...attendance(), location: { ...attendance().location, point: new firestore.GeoPoint(latitude, longitude) } }));
+  }
+  await assertSucceeds(setDoc(ref, attendance()));
+});
+
+test('SRS-28: lokasi lama, masa depan, akurasi buruk dan lab palsu ditolak server', async () => {
+  const ref = doc(db(), 'attendance', 'open_caesar');
+  for (const location of [
+    { ...attendance().location, accuracy: 51 },
+    { ...attendance().location, observedAt: firestore.Timestamp.fromMillis(Date.now() - 60000) },
+    { ...attendance().location, observedAt: firestore.Timestamp.fromMillis(Date.now() + 60000) },
+  ]) await assertFails(setDoc(ref, { ...attendance(), location }));
+  await assertFails(setDoc(ref, { ...attendance(), labId: 'fake-lab' }));
+  await assertFails(setDoc(ref, { ...attendance(), location: { ...attendance().location, mocked: true } }));
+});
+
+test('SRS-28: radius sesi lebih kecil ditegakkan service dan rules', async () => {
+  await updateDoc(doc(db('assistant'), 'sessions', 'open'), { attendanceRadiusMeters: 20 });
+  const position = { ...evidence().position, latitude: lab.latitude + 0.0003 };
+  await assert.rejects(service(db()).recordParticipation('open', undefined, { method: 'location', position }), /luar radius/);
+  await assertFails(setDoc(doc(db(), 'attendance', 'open_caesar'), {
+    ...attendance(), location: { ...attendance().location, point: new firestore.GeoPoint(position.latitude, position.longitude) },
+  }));
+});
+
+test('SRS-28: lab belum dikonfigurasi dan bukti lokasi hilang tidak boleh fallback dummy', async () => {
+  await assert.rejects(service(db()).recordParticipation('open'), /Lokasi perangkat/);
+  await updateDoc(doc(db('assistant'), 'sessions', 'open'), { labId: 'missing-lab' });
+  await assert.rejects(service(db()).recordParticipation('open', undefined, evidence()), /tidak ditemukan/);
+  await assertFails(setDoc(doc(db(), 'attendance', 'open_caesar'), attendance()));
+});
+
+test('SRS-31: QR benar tersimpan dengan validasi lokasi; QR salah atau dirotasi ditolak', async () => {
+  const ref = doc(db(), 'attendance', 'open_caesar');
+  await assertFails(setDoc(ref, { ...attendance(), method: 'qr', qrToken: 'wrong_token_value' }));
+  const qr = { type: 'hadirin.attendance', version: 1, sessionId: 'open', token: '0123456789abcdef' };
+  await assert.rejects(service(db()).recordParticipation('open', undefined, { ...evidence(), method: 'qr', qr: { ...qr, sessionId: 'upcoming' } }), /tidak sesuai/);
+  await assertSucceeds(service(db()).recordParticipation('open', undefined, { ...evidence(), method: 'qr', qr }));
+  assert.equal((await getDoc(ref)).data().method, 'qr');
+});
+
+test('SRS-31: kode QR tidak melewati status, radius, maupun antiduplikasi', async () => {
+  const qr = { type: 'hadirin.attendance', version: 1, sessionId: 'open', token: '0123456789abcdef' };
+  await assert.rejects(service(db()).recordParticipation('open', undefined, { method: 'qr', qr,
+    position: { ...evidence().position, latitude: 0 } }), /luar radius/);
+  const results = await Promise.allSettled([
+    service(db()).recordParticipation('open', undefined, { ...evidence(), method: 'qr', qr }),
+    service(db()).recordParticipation('open', undefined, evidence()),
+  ]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  await assertFails(setDoc(doc(db('other'), 'attendance', 'closed_other'), { ...attendance('other', 'closed'), method: 'qr', qrToken: qr.token }));
+});
+
+test('SRS-30: push token hanya dapat ditulis pemilik profil dengan bentuk list terbatas', async () => {
+  await assertSucceeds(updateDoc(doc(db(), 'users', 'caesar'), { expoPushTokens: ['ExpoPushToken[test_token_123456]'] }));
+  await assertFails(updateDoc(doc(db('other'), 'users', 'caesar'), { expoPushTokens: ['ExpoPushToken[foreign_token_1234]'] }));
+  await assertFails(updateDoc(doc(db(), 'users', 'caesar'), { expoPushTokens: 'not-a-list' }));
+  await assertFails(updateDoc(doc(db(), 'users', 'caesar'), { expoPushTokens: Array(21).fill('too-many') }));
+});
+
 test('akun lama melengkapi NIM string sekali; angka nol awal dipertahankan', async () => {
   const api = enrollment('caesar');
-  assert.equal(await api.saveOwnNim(' 00123456789 '), '00123456789');
-  assert.equal((await getDoc(doc(db(), 'users', 'caesar'))).data().nim, '00123456789');
-  assert.equal(await api.saveOwnNim('00123456789'), '00123456789');
-  await assert.rejects(api.saveOwnNim('987654321'));
+  assert.equal(await api.saveOwnNim(' 00123456789012 '), '00123456789012');
+  assert.equal((await getDoc(doc(db(), 'users', 'caesar'))).data().nim, '00123456789012');
+  assert.equal(await api.saveOwnNim('00123456789012'), '00123456789012');
+  await assert.rejects(api.saveOwnNim('98765432109876'));
   await assert.rejects(api.saveOwnNim('  '));
 });
 
 test('rules menolak NIM angka, perubahan NIM tersimpan, serta perubahan profil orang lain', async () => {
   const own = doc(db(), 'users', 'caesar');
   await assertFails(updateDoc(own, { nim: 123456789 }));
-  await assertSucceeds(updateDoc(own, { nim: '123456789' }));
-  await assertFails(updateDoc(own, { nim: '987654321' }));
+  await assertSucceeds(updateDoc(own, { nim: '24060124120051' }));
+  await assertFails(updateDoc(own, { nim: '98765432109876' }));
   await assertFails(updateDoc(own, { nim: firestore.deleteField() }));
-  await assertFails(updateDoc(doc(db('other'), 'users', 'caesar'), { nim: '111222333' }));
+  await assertFails(updateDoc(doc(db('other'), 'users', 'caesar'), { nim: '11122233344455' }));
   await assertSucceeds(updateDoc(own, { name: 'Caesar' }));
   await assertFails(updateDoc(own, { role: 'asisten' }));
 });
 
 test('asisten menambah peserta dari NIM ke UID pada sesi lama, lalu praktikan bisa presensi', async () => {
   await env.withSecurityRulesDisabled(async (context) => {
-    await updateDoc(doc(context.firestore(), 'users', 'caesar'), { nim: '123456789', name: 'Caesar' });
-    await setDoc(doc(context.firestore(), 'sessions', 'legacy-nim'), { ...session, status: 'open' });
+    await updateDoc(doc(context.firestore(), 'users', 'caesar'), { nim: '24060124120051', name: 'Caesar' });
+    await setDoc(doc(context.firestore(), 'sessions', 'legacy-nim'), { ...session, status: 'open', labId: 'lab-a' });
   });
   const api = enrollment();
-  assert.equal((await api.findPractitionerByNim('123456789')).uid, 'caesar');
-  assert.equal((await api.enrollPractitionerByNim('legacy-nim', '123456789', 'caesar')).alreadyEnrolled, false);
-  assert.equal((await api.enrollPractitionerByNim('legacy-nim', '123456789', 'caesar')).alreadyEnrolled, true);
+  assert.equal((await api.findPractitionerByNim('24060124120051')).uid, 'caesar');
+  assert.equal((await api.enrollPractitionerByNim('legacy-nim', '24060124120051', 'caesar')).alreadyEnrolled, false);
+  assert.equal((await api.enrollPractitionerByNim('legacy-nim', '24060124120051', 'caesar')).alreadyEnrolled, true);
   assert.deepEqual((await getDoc(doc(db(), 'sessions', 'legacy-nim'))).data().participantIds, ['caesar']);
-  await assertSucceeds(service(db()).recordParticipation('legacy-nim'));
+  await assertSucceeds(service(db()).recordParticipation('legacy-nim', undefined, evidence()));
 });
 
 test('pencarian NIM ganda dan NIM tidak terdaftar tidak memilih akun secara diam-diam', async () => {
   await env.withSecurityRulesDisabled(async (context) => {
-    await Promise.all(['caesar', 'other'].map((uid) => updateDoc(doc(context.firestore(), 'users', uid), { nim: '123456789' })));
+    await Promise.all(['caesar', 'other'].map((uid) => updateDoc(doc(context.firestore(), 'users', uid), { nim: '24060124120051' })));
   });
-  await assert.rejects(enrollment().findPractitionerByNim('123456789'), /beberapa akun/);
-  await assert.rejects(enrollment().findPractitionerByNim('000000000'), /belum ditemukan/);
+  await assert.rejects(enrollment().findPractitionerByNim('24060124120051'), /beberapa akun/);
+  await assert.rejects(enrollment().findPractitionerByNim('00000000000000'), /belum ditemukan/);
 });
 
 test('praktikan tidak dapat mencari direktori NIM atau mendaftarkan dirinya ke sesi', async () => {
   await env.withSecurityRulesDisabled(async (context) => {
-    await updateDoc(doc(context.firestore(), 'users', 'caesar'), { nim: '123456789' });
+    await updateDoc(doc(context.firestore(), 'users', 'caesar'), { nim: '24060124120051' });
   });
-  await assert.rejects(enrollment('caesar').findPractitionerByNim('123456789'));
+  await assert.rejects(enrollment('caesar').findPractitionerByNim('24060124120051'));
   await assertFails(updateDoc(doc(db(), 'sessions', 'open'), { participantIds: ['caesar'] }));
 });
 
 test('pendaftaran dua NIM bersamaan tidak menimpa peserta sebelumnya', async () => {
   await env.withSecurityRulesDisabled(async (context) => {
-    await updateDoc(doc(context.firestore(), 'users', 'caesar'), { nim: '123456789' });
-    await updateDoc(doc(context.firestore(), 'users', 'other'), { nim: '987654321' });
+    await updateDoc(doc(context.firestore(), 'users', 'caesar'), { nim: '24060124120051' });
+    await updateDoc(doc(context.firestore(), 'users', 'other'), { nim: '98765432109876' });
     await setDoc(doc(context.firestore(), 'sessions', 'legacy-nim'), { ...session, status: 'open' });
   });
   const api = enrollment();
   await Promise.all([
-    api.enrollPractitionerByNim('legacy-nim', '123456789', 'caesar'),
-    api.enrollPractitionerByNim('legacy-nim', '987654321', 'other'),
+    api.enrollPractitionerByNim('legacy-nim', '24060124120051', 'caesar'),
+    api.enrollPractitionerByNim('legacy-nim', '98765432109876', 'other'),
   ]);
   assert.deepEqual((await getDoc(doc(db(), 'sessions', 'legacy-nim'))).data().participantIds.sort(), ['caesar', 'other']);
 });
@@ -127,7 +189,7 @@ test('praktikan menyimpan presensi; server memberi timestamp', async () => {
 test('service asli menolak klik paralel dan mengecek ulang sesi', async () => {
   const store = db();
   const api = service(store);
-  const results = await Promise.allSettled([api.recordParticipation('open'), api.recordParticipation('open')]);
+  const results = await Promise.allSettled([api.recordParticipation('open', undefined, evidence()), api.recordParticipation('open', undefined, evidence())]);
   assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
   await assert.rejects(api.recordParticipation('closed'));
   await assert.rejects(api.recordParticipation('upcoming'));

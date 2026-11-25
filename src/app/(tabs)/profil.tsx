@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AuthButton, AuthError, AuthField, authColors } from '@/components/auth-ui';
 import { StateView } from '@/components/state-view';
+import { NotificationSettings } from '@/components/notification-settings';
 import { BottomTabInset } from '@/constants/theme';
 import { useApp } from '@/context/app-context';
 import { useAuth } from '@/context/auth-context';
@@ -38,8 +39,8 @@ export default function ProfilScreen() {
     setLoggingOut(true);
     try {
       await logout();
-    } catch {
-      setError('Gagal keluar. Periksa koneksi lalu coba lagi.');
+    } catch (failure) {
+      setError(failure instanceof Error && !('code' in failure) ? failure.message : 'Gagal keluar. Periksa koneksi lalu coba lagi.');
       setLoggingOut(false);
     }
   };
@@ -129,6 +130,7 @@ export default function ProfilScreen() {
               </Pressable>
             ) : null}
 
+            <NotificationSettings />
             <AuthError message={error} />
 
             <Pressable
