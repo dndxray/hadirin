@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DecisionModal } from '../../../../features/asisten/components/DecisionModal';
 import { PermissionRequestItem } from '../../../../features/asisten/types';
+import { useAuth } from '@/context/auth-context';
 import {
   decidePermissionRequest,
   processPendingPermissionAi,
@@ -49,7 +50,7 @@ function AiBadge({ ai }: { ai: PermissionRequestItem['ai'] }) {
   );
 }
 
-function PermissionCard({
+function PermissionCard({ //kartu putih yg kotak by 1 user
   item,
   onApprove,
   onReject,
@@ -104,8 +105,9 @@ function PermissionCard({
   );
 }
 
-export default function PermissionsScreen() {
+export default function PermissionsScreen() { //utama
   const insets = useSafeAreaInsets();
+  const { profile, loading: authLoading } = useAuth();
   const [items, setItems] = useState<PermissionRequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +115,8 @@ export default function PermissionsScreen() {
   const [decisionType, setDecisionType] = useState<'approved' | 'rejected'>('approved');
 
   useEffect(() => {
+    if (profile?.role !== 'asisten') return;
+
     const unsubscribe = subscribePermissionRequests(
       (requests) => {
         setItems(requests);
@@ -125,7 +129,13 @@ export default function PermissionsScreen() {
       }
     );
     return () => unsubscribe();
-  }, []);
+  }, [profile?.role]);
+
+  if (authLoading) {
+    return <View style={[styles.screen, styles.center]}><ActivityIndicator color="#1B2A4E" /></View>;
+  }
+  if (!profile) return <Redirect href="/login" />;
+  if (profile.role !== 'asisten') return <Redirect href="/home" />;
 
   const handleDecisionConfirm = async (note: string) => {
     if (!decisionTarget) return;
@@ -177,7 +187,7 @@ export default function PermissionsScreen() {
         />
       )}
 
-      {decisionTarget && (
+      {decisionTarget && ( //menekan tombol Setujui atau Tolak
         <DecisionModal
           visible={true}
           type={decisionType}

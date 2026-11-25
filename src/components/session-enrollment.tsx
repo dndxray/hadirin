@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/context/auth-context';
-import { enrollPractitionerByNim, findPractitionerByNim, type PractitionerAccount } from '@/services/enrollment-service';
+import { syncClassSessions } from '@/services/class-sync';
+import { enrollPractitionerToClass, findPractitionerByNim, type PractitionerAccount } from '@/services/enrollment-service';
 import { firebaseErrorMessage } from '@/utils/firebase-error';
 import { theme } from '../../features/asisten/theme';
 
-export function SessionEnrollment({ sessionId, participantIds = [] }: { sessionId: string; participantIds?: string[] }) {
+type RosterEntry = { nim: string; name: string };
+
+export function SessionEnrollment({ classId, roster = [] }: { classId?: string; roster?: RosterEntry[] }) {
   const { profile } = useAuth();
   const [nim, setNim] = useState('');
   const [account, setAccount] = useState<PractitionerAccount | null>(null);
@@ -17,26 +20,46 @@ export function SessionEnrollment({ sessionId, participantIds = [] }: { sessionI
 
   async function search() {
     setBusy(true); setError(null); setMessage(null); setAccount(null);
-    try { setAccount(await findPractitionerByNim(nim)); }
+    try {
+      const found = await findPractitionerByNim(nim);
+      if (found.uid === profile?.uid) throw new Error('Asisten tidak bisa menambahkan dirinya sendiri sebagai peserta.');
+      setAccount(found);
+    }
     catch (failure) { setError(firebaseErrorMessage(failure)); }
     finally { setBusy(false); }
   }
+
   async function enroll() {
-    if (!account) return;
+    if (!account || !classId) return;
     setBusy(true); setError(null); setMessage(null);
     try {
-      const result = await enrollPractitionerByNim(sessionId, account.nim, account.uid);
-      setMessage(result.alreadyEnrolled ? 'Praktikan sudah terdaftar di sesi ini.' : `${result.account.name} berhasil ditambahkan ke sesi.`);
+      const result = await enrollPractitionerToClass(classId, account.nim, account.uid);
+      if (!result.alreadyEnrolled) await syncClassSessions(classId);
+      setMessage(result.alreadyEnrolled
+        ? 'Praktikan sudah terdaftar di kelas ini.'
+        : `${result.account.name} berhasil ditambahkan ke kelas dan sesinya.`);
     } catch (failure) { setError(firebaseErrorMessage(failure)); }
     finally { setBusy(false); }
   }
-  const enrolled = !!account && participantIds.includes(account.uid);
+
+  const enrolled = !!account && roster.some((item) => item.nim === account.nim);
+
+  if (!classId) {
+    return <View style={styles.container}>
+      <Text accessibilityRole="header" style={styles.title}>Peserta sesi</Text>
+      <Text style={styles.caption}>
+        Sesi ini belum terhubung ke kelas, jadi peserta belum bisa ditambahkan dari sini.
+        Ubah sesi lalu pilih ulang kelasnya, atau jalankan script backfill.
+      </Text>
+    </View>;
+  }
+
   return <View style={styles.container}>
     <Text accessibilityRole="header" style={styles.title}>Peserta sesi</Text>
-    <Text style={styles.caption}>{participantIds.length} praktikan terdaftar. Cari NIM, periksa identitas, lalu tambahkan ke sesi.</Text>
+    <Text style={styles.caption}>{roster.length} praktikan terdaftar di kelas. Cari NIM, periksa identitas, lalu tambahkan ke kelas.</Text>
     <Text style={styles.label}>NIM praktikan</Text>
     <TextInput accessibilityLabel="NIM peserta" value={nim} editable={!busy} autoCapitalize="characters" autoCorrect={false}
-      placeholder="Contoh: 123456789" placeholderTextColor={theme.colors.textSecondary} maxLength={30} style={styles.input}
+      placeholder="14 angka" placeholderTextColor={theme.colors.textSecondary} maxLength={30} style={styles.input}
       onChangeText={(value) => { setNim(value); setAccount(null); setError(null); setMessage(null); }} />
     <Pressable accessibilityRole="button" disabled={busy} accessibilityState={{ disabled: busy }} style={[styles.button, busy && { opacity: 0.6 }]}
       onPress={() => void search()}><Text style={styles.buttonText}>{busy ? 'Memproses…' : 'Cari praktikan'}</Text></Pressable>

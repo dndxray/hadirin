@@ -16,6 +16,7 @@ import {
   setSessionStatus,
   subscribeAssistantSessions,
   processPendingPermissionAi,
+  subscribePendingPermissionAiAutoProcessor,
   SessionInput,
 } from '../../src/services/assistant-service';
 
@@ -153,11 +154,13 @@ export function AsistenProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, [authLoading, isAsisten]);
 
-  // SRS-14: classify pending permission reasons as soon as an assistant is
+  // SRS-14: classify pending/failed permission reasons as soon as an assistant is
   // signed in, without blocking the practitioner submission flow.
   useEffect(() => {
     if (!isAsisten) return;
     void processPendingPermissionAi();
+    const unsubscribe = subscribePendingPermissionAiAutoProcessor();
+    return () => unsubscribe();
   }, [isAsisten]);
 
   const sortedSessions = useMemo(() => {

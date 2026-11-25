@@ -6,10 +6,18 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isAsisten() {
+    function profileDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function hasRole(roleName) {
       return signedIn() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'asisten';
+        (roleName in profileDoc().data.get('roles', []) || profileDoc().data.role == roleName);
+    }
+
+    function isAsisten() {
+      return hasRole('asisten');
     }
 
     function validNim(data) {
@@ -21,11 +29,18 @@ service cloud.firestore {
       allow read: if signedIn() && (request.auth.uid == uid || isAsisten());
       allow create: if signedIn() && request.auth.uid == uid
                     && request.resource.data.role in ['asisten', 'praktikan']
-                    && validNim(request.resource.data);
+                    && validNim(request.resource.data)
+                    && request.resource.data.get('roles', [request.resource.data.role]).hasOnly(['praktikan', 'asisten'])
+                    && (!('asisten' in request.resource.data.get('roles', []))
+                        || request.resource.data.get('approvalStatus', '') == 'pending');
       allow update: if signedIn() && request.auth.uid == uid
                     && request.resource.data.role == resource.data.role
                     && validNim(request.resource.data)
-                    && (!('nim' in resource.data) || resource.data.nim == '' || request.resource.data.nim == resource.data.nim);
+                    && (!('nim' in resource.data) || resource.data.nim == '' || request.resource.data.nim == resource.data.nim)
+                    && request.resource.data.get('roles', [resource.data.role]).hasOnly(['praktikan', 'asisten'])
+                    && (!('asisten' in request.resource.data.get('roles', []))
+                        || resource.data.get('approvalStatus', '') == 'approved'
+                        || request.resource.data.get('approvalStatus', '') == 'pending');
       allow delete: if false;
     }
 
@@ -42,9 +57,7 @@ service cloud.firestore {
     }
 
     function isPraktikan() {
-      return signedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'praktikan';
+      return hasRole('praktikan');
     }
     function sessionData(id) {
       return get(/databases/$(database)/documents/sessions/$(id)).data;

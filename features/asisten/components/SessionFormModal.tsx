@@ -67,6 +67,7 @@ export function SessionFormModal({
 
   const [courseName, setCourseName] = useState('');
   const [courseCode, setCourseCode] = useState('');
+  const [classId, setClassId] = useState('');
   const [className, setClassName] = useState('');
   const [room, setRoom] = useState('');
   const [description, setDescription] = useState('');
@@ -102,6 +103,7 @@ export function SessionFormModal({
   const resetFormFromInitial = () => {
     setCourseName(initialData?.courseName || '');
     setCourseCode(initialData?.courseCode || '');
+    setClassId(initialData?.classId || '');
     setClassName(initialData?.className || '');
     setRoom(initialData?.room || '');
     setDescription(initialData?.description || '');
@@ -148,6 +150,7 @@ export function SessionFormModal({
     const available = classes.filter((c) => c.course === course);
     if (available.length > 0) {
       setClassName('');
+      setClassId('');
       setRoom('');
       setParticipantIds([]);
       setMapping(null);
@@ -157,6 +160,7 @@ export function SessionFormModal({
   const handleSelectClass = async (c: ClassData) => {
     const requestId = ++mappingRequest.current;
     setClassName(c.name);
+    setClassId(c.id);
     if (c.room) setRoom(c.room);
 
     if (c.participants.length === 0) {
@@ -257,6 +261,7 @@ export function SessionFormModal({
       await onSubmit({
         courseName: courseName.trim(),
         courseCode: courseCode.trim(),
+        classId: classId || undefined,
         className: className.trim(),
         dateLabel: dateLabelFormatted,
         timeRange: timeRangeFormatted,
@@ -374,7 +379,7 @@ export function SessionFormModal({
       onRequestClose={onClose}
       onShow={resetFormFromInitial}
     >
-      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.overlay} behavior="padding">
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={styles.sheet}>
           <View style={styles.grabber} />

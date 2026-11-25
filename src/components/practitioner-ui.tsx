@@ -11,7 +11,7 @@ export function PractitionerScreen({ title, children }: PropsWithChildren<{ titl
   const insets = useSafeAreaInsets();
   const { profile, loading } = useAuth();
   if (!loading && !profile) return <Redirect href="/login" />;
-  if (!loading && profile?.role !== 'praktikan') return <Redirect href="/jadwal" />;
+  if (!loading && profile?.role !== 'praktikan') return <Redirect href="/home" />;
   return <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, backgroundColor: colors.background }}
     contentContainerStyle={{ paddingTop: Platform.OS === 'web' ? 100 : insets.top + 24, paddingBottom: insets.bottom + 110, paddingHorizontal: 20, alignItems: 'center' }}>
     <View style={ui.content}>

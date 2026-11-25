@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,11 +12,16 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+// Import firestore udah digabung jadi satu di sini
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { Redirect } from 'expo-router';
 
 import { AuthError, authColors } from '@/components/auth-ui';
+import { BottomTabInset } from '@/constants/theme';
 import { useApp } from '@/context/app-context';
 import { db } from '@/lib/firebase';
+import { syncClassSessions } from '@/services/class-sync';
+import { hasRole } from '@/utils/roles';
 import {
   createClass,
   removeClass,
@@ -31,13 +35,7 @@ import {
 
 const EMPTY_FORM: ClassInput = { name: '', course: '', room: '' };
 
-const COURSE_OPTIONS = [
-  'Pembelajaran Mesin',
-  'Pemrograman Perangkat Bergerak',
-  'Praktikum Basis Data',
-  'Praktikum Jaringan Komputer',
-];
-
+// COURSE_OPTIONS udah dihapus karena sekarang ambil dari database
 const CLASS_OPTIONS = ['Kelas A', 'Kelas B', 'Kelas C', 'E101', 'E102'];
 
 const AVATARS = [
@@ -63,18 +61,31 @@ function Sheet({
   visible,
   onClose,
   children,
+  scroll,
 }: {
   visible: boolean;
   onClose: () => void;
   children: ReactNode;
+  scroll?: boolean;
 }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Pressable style={styles.overlay} onPress={onClose}>
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.grabber} />
-            {children}
+            {scroll ? (
+              <ScrollView
+                style={{ flexShrink: 1 }}
+                contentContainerStyle={{ gap: 12 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {children}
+              </ScrollView>
+            ) : (
+              children
+            )}
           </Pressable>
         </Pressable>
       </KeyboardAvoidingView>
@@ -103,7 +114,7 @@ export default function KelasScreen() {
   const { currentUser } = useApp();
 
   const [classes, setClasses] = useState<ClassData[]>([]);
-  const [users, setUsers] = useState<any[]>([]); // Buat nampung data mahasiswa
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -114,7 +125,8 @@ export default function KelasScreen() {
   const [saving, setSaving] = useState(false);
 
   const [pickerMode, setPickerMode] = useState<'course' | 'name' | 'student' | null>(null);
-
+  const [availableCourses, setAvailableCourses] = useState<{ label: string; value: string }[]>([]);
+  
   const [toDelete, setToDelete] = useState<ClassData | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -141,21 +153,67 @@ export default function KelasScreen() {
     // Tarik data user yang rolenya praktikan buat Dropdown
     const fetchUsers = async () => {
       try {
-        const q = query(collection(db, 'users'), where('role', '==', 'praktikan'));
-        const snap = await getDocs(q);
-        setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const snap = await getDocs(collection(db, 'users'));
+        setUsers(
+          snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter((u: any) => hasRole(u, 'praktikan') && u.id !== currentUser?.id),
+        );
       } catch (err) {
         console.error(err);
       }
     };
     fetchUsers();
 
-    return () => unsubscribe();
-  }, []);
+    // Tarik data matkul & FILTER berdasarkan hak akses asisten
+    const fetchMatkul = async () => {
+      try {
+        const matkulSnap = await getDocs(collection(db, 'matkul'));
+        const allMatkul = matkulSnap.docs.map(d => ({
+          id: d.id,
+          nama: d.data().nama_matkul || d.data().nama || d.id, 
+        }));
 
-  if (currentUser?.role !== 'asisten') return null;
+        let filtered = allMatkul;
+
+        // Ambil data user terbaru LANGSUNG dari Firestore biar ga pake data cache context yang usang
+        if (currentUser?.id) {
+          const userRef = doc(db, 'users', currentUser.id);
+          const userSnap = await getDoc(userRef);
+          
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            const matkulDiampu = userData.matkul_diampu || [];
+
+            console.log('Data matkul_diampu dari DB:', matkulDiampu);
+
+            if (currentUser.role === 'asisten') {
+              filtered = allMatkul.filter((m) => matkulDiampu.includes(m.id));
+            }
+          }
+        }
+
+        setAvailableCourses(filtered.map(m => ({ label: m.nama, value: m.nama }))); 
+      } catch (err) {
+        console.error('Gagal load matkul:', err);
+      }
+    };
+
+    if (currentUser) {
+      fetchMatkul();
+    }
+
+    return () => unsubscribe();
+  }, [currentUser?.id]);
+
+  if (currentUser?.role !== 'asisten') return <Redirect href="/home" />;
 
   const activeClass = classes.find((c) => c.id === participantClassId) ?? null;
+  const unmappedParticipants = activeClass
+    ? activeClass.participants.filter(
+        (p) => !users.some((u) => typeof u.nim === 'string' && u.nim.trim() === p.nim.trim()),
+      )
+    : [];
 
   const openAdd = () => {
     setEditing(null);
@@ -179,6 +237,12 @@ export default function KelasScreen() {
     };
     if (!input.name) return setFormError('Nama kelas wajib diisi.');
     if (!input.course) return setFormError('Mata praktikum wajib diisi.');
+
+    // Validasi extra buat keamanan
+    const isAllowed = availableCourses.some(c => c.value === input.course);
+    if (!isAllowed) {
+      return setFormError('Akses ditolak: Anda tidak berhak membuat kelas untuk matkul ini.');
+    }
 
     setFormError(null);
     setSaving(true);
@@ -210,24 +274,24 @@ export default function KelasScreen() {
     }
   };
 
-  const resetParticipantForm = () => {
+  const resetParticipantForm = () => { 
     setPForm({ nim: '', name: '' });
     setEditingNim(null);
     setPError(null);
   };
 
-  const openParticipants = (item: ClassData) => {
+  const openParticipants = (item: ClassData) => { 
     resetParticipantForm();
     setParticipantClassId(item.id);
   };
 
-  const startEditParticipant = (p: Participant) => {
+  const startEditParticipant = (p: Participant) => { 
     setPForm({ nim: p.nim, name: p.name });
     setEditingNim(p.nim);
     setPError(null);
   };
 
-  const handleSaveParticipant = async () => {
+  const handleSaveParticipant = async () => { 
     if (!activeClass) return;
     const nim = pForm.nim.trim();
     const name = pForm.name.trim();
@@ -245,6 +309,7 @@ export default function KelasScreen() {
         ? activeClass.participants.map((p) => (p.nim === editingNim ? { nim, name } : p))
         : [...activeClass.participants, { nim, name }];
       await saveParticipants(activeClass.id, next);
+      await syncClassSessions(activeClass.id);
       resetParticipantForm();
     } catch {
       setPError('Gagal menyimpan peserta. Coba lagi.');
@@ -253,11 +318,12 @@ export default function KelasScreen() {
     }
   };
 
-  const handleDeleteParticipant = async (nim: string) => {
+  const handleDeleteParticipant = async (nim: string) => { 
     if (!activeClass) return;
     setPError(null);
     try {
       await saveParticipants(activeClass.id, activeClass.participants.filter((p) => p.nim !== nim));
+      await syncClassSessions(activeClass.id);
       if (editingNim === nim) resetParticipantForm();
     } catch {
       setPError('Gagal menghapus peserta. Coba lagi.');
@@ -271,19 +337,21 @@ export default function KelasScreen() {
 
     if (pickerMode === 'course') {
       title = 'Pilih Mata Praktikum';
-      options = COURSE_OPTIONS.map(o => ({ label: o, value: o }));
+      options = availableCourses; // <--- PAKAI STATE YANG SUDAH DIFILTER
     } else if (pickerMode === 'name') {
       title = 'Pilih Kelas';
       options = CLASS_OPTIONS.map(o => ({ label: o, value: o }));
     } else if (pickerMode === 'student') {
       title = 'Pilih Praktikan';
-      options = users.map(u => ({ 
-        label: `${u.name} (${u.nim || u.email?.split('@')[0] || '12345'})`, 
-        value: { name: u.name, nim: u.nim || u.email?.split('@')[0] || '12345' } 
-      }));
+      options = users
+        .filter((u) => typeof u.nim === 'string' && u.nim.trim() !== '')
+        .map(u => ({
+          label: `${u.name} (${u.nim})`,
+          value: { name: u.name, nim: u.nim },
+        }));
     }
 
-    return (
+    return ( 
       <Modal visible transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setPickerMode(null)}>
           <View style={styles.modalContent}>
@@ -317,9 +385,9 @@ export default function KelasScreen() {
     );
   };
 
-  return (
+  return ( 
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + BottomTabInset + 40 }} showsVerticalScrollIndicator={false}>
         <View style={[styles.header, { paddingTop: insets.top + 28 }]}>
           <View style={styles.headerInner}>
             <Text style={styles.headerEyebrow}>HADIRIN</Text>
@@ -385,7 +453,7 @@ export default function KelasScreen() {
         </View>
       </ScrollView>
 
-      <Sheet visible={formOpen} onClose={() => setFormOpen(false)}>
+      <Sheet visible={formOpen} onClose={() => setFormOpen(false)} scroll>
         <Text style={styles.sheetTitle}>{editing ? 'Ubah Kelas' : 'Tambah Kelas'}</Text>
         <Text style={styles.sheetSubtitle}>Isi data kelas praktikum.</Text>
 
@@ -415,7 +483,6 @@ export default function KelasScreen() {
             <Pressable style={styles.dropdownInput} onPress={() => {}}>
                <Text style={styles.dropdownInputText}>Isi manual di bawah ini</Text>
             </Pressable>
-            {/* Input ruangan tetep manual karena gak ada list ruangan di DB */}
             <View style={{ height: 10 }} /> 
             <TextInput
               style={styles.inputField}
@@ -434,6 +501,12 @@ export default function KelasScreen() {
       <Sheet visible={!!activeClass} onClose={() => setParticipantClassId(null)}>
         <Text style={styles.sheetTitle}>Peserta</Text>
         <Text style={styles.sheetSubtitle}>{activeClass ? `${activeClass.course} · ${activeClass.name}` : ''}</Text>
+        {unmappedParticipants.length ? (
+          <Text style={styles.sheetSubtitle}>
+            {unmappedParticipants.length} peserta belum punya akun, jadi belum masuk ke sesi
+            ({unmappedParticipants.map((p) => p.nim).join(', ')}).
+          </Text>
+        ) : null}
 
         <ScrollView style={{ maxHeight: 230 }} showsVerticalScrollIndicator={false}>
           {activeClass && activeClass.participants.length === 0 ? (
@@ -465,7 +538,6 @@ export default function KelasScreen() {
         <View style={{ gap: 14, marginTop: 6 }}>
           <Text style={styles.formHeading}>{editingNim ? 'Ubah peserta' : 'Tambah peserta'}</Text>
           
-          {/* DROPDOWN NAMA PESERTA */}
           <View>
             <Text style={styles.dropdownLabel}>Pilih Praktikan</Text>
             <Pressable style={styles.dropdownInput} onPress={() => setPickerMode('student')}>

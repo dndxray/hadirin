@@ -2,6 +2,7 @@ import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 
 import { auth, db } from '@/lib/firebase';
 import type { CloudSession, SessionSummary } from '@/types/practitioner';
+import { getSessionStatus } from '@/utils/session-status';
 
 export function validateReason(reason: string) {
   const trimmed = reason.trim();
@@ -40,12 +41,12 @@ export async function recordParticipation(sessionId: string, reason?: string) {
     if (attendanceDoc.exists()) throw new Error('Presensi untuk sesi ini sudah tercatat.');
     if (permissionDoc.exists()) throw new Error('Izin untuk sesi ini sudah diajukan. Periksa statusnya di riwayat.');
     if (reason === undefined) {
-      if (session.status !== 'open') throw new Error('Sesi belum dibuka atau sudah ditutup oleh asisten.');
+      if (getSessionStatus(session) !== 'open') throw new Error('Sesi belum dibuka atau sudah ditutup oleh asisten.');
       transaction.set(attendanceRef, {
         sessionId, practitionerId: uid, checkedInAt: serverTimestamp(), session: summary(session),
       });
     } else {
-      if (session.status === 'closed') throw new Error('Sesi sudah ditutup. Hubungi asisten untuk pengajuan susulan.');
+      if (getSessionStatus(session) === 'closed') throw new Error('Sesi sudah ditutup. Hubungi asisten untuk pengajuan susulan.');
       transaction.set(permissionRef, {
         sessionId, practitionerId: uid, reason: reason.trim(), status: 'pending',
         createdAt: serverTimestamp(), session: summary(session), ai: { status: 'pending' },
