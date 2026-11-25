@@ -14,6 +14,7 @@ import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-nativ
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { authColors } from '@/components/auth-ui';
+import { NotificationListener } from '@/components/notification-listener';
 import { AppProvider } from '@/context/app-context';
 import { AttendanceProvider } from '@/context/attendance-context';
 import { AuthProvider, useAuth } from '@/context/auth-context';
@@ -27,6 +28,7 @@ function RootNavigator() {
 
   return (
     <>
+    <NotificationListener />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
 
