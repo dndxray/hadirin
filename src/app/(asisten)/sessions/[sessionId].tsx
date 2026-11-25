@@ -431,9 +431,12 @@ export default function SessionDetailScreen() {
           courseName: session.courseName,
           courseCode: session.courseCode,
           className: displayKelas,
+          classId: (session as any).classId,
           dateLabel: displayDate,
           timeRange: displayTime,
           room: session.room,
+          labId: session.labId,
+          radiusM: session.radiusM,
           description: session.description,
           participantIds: session.participantIds,
         }}

@@ -1,6 +1,8 @@
 import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import * as Location from 'expo-location';
 
 import { auth, db } from '@/lib/firebase';
+import { isWithinLab } from '@/lib/geo';
 import type { CloudSession, SessionSummary } from '@/types/practitioner';
 import { getSessionStatus } from '@/utils/session-status';
 
@@ -42,6 +44,23 @@ export async function recordParticipation(sessionId: string, reason?: string) {
     if (permissionDoc.exists()) throw new Error('Izin untuk sesi ini sudah diajukan. Periksa statusnya di riwayat.');
     if (reason === undefined) {
       if (getSessionStatus(session) !== 'open') throw new Error('Sesi belum dibuka atau sudah ditutup oleh asisten.');
+      if (session.labId) {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status !== 'granted') {
+          throw new Error('Izin lokasi diperlukan untuk melakukan presensi.');
+        }
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        const withinLab = isWithinLab(
+          { lat: position.coords.latitude, lng: position.coords.longitude },
+          session.labId,
+          session.radiusM ?? 50,
+        );
+        if (!withinLab) {
+          throw new Error('Lokasi Anda berada di luar radius laboratorium sesi.');
+        }
+      }
       transaction.set(attendanceRef, {
         sessionId, practitionerId: uid, checkedInAt: serverTimestamp(), session: summary(session),
       });

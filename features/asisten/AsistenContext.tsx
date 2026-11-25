@@ -122,7 +122,7 @@ const AsistenContext = createContext<AsistenContextValue | undefined>(undefined)
 // `date` (objek Date) sengaja tidak dibandingkan langsung karena selalu
 // berbeda dari string tanggal di state; perubahan tanggal sudah tercermin di
 // `dateLabel`. `labId` ikut karena lokasi presensi berpindah.
-const SCHEDULE_FIELDS = ['dateLabel', 'startTime', 'endTime', 'timeRange', 'room', 'labId'] as const;
+const SCHEDULE_FIELDS = ['dateLabel', 'startTime', 'endTime', 'timeRange', 'room', 'labId', 'radiusM'] as const;
 
 export function AsistenProvider({ children }: { children: ReactNode }) {
   const { profile, loading: authLoading } = useAuth();
