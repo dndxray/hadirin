@@ -57,6 +57,10 @@ export default function AppTabs() {
             </>
           )}
 
+          <TabTrigger name="maps" href="/maps" asChild>
+            <TabButton icon="map" label="Maps" />
+          </TabTrigger>
+
           <TabTrigger name="profil" href="/profil" asChild>
             <TabButton icon="person" label="Akun" />
           </TabTrigger>
