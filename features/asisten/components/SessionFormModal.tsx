@@ -1,26 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { Timestamp } from 'firebase/firestore';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  View,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  View
 } from 'react-native';
-import { Timestamp } from 'firebase/firestore';
-import { Ionicons } from '@expo/vector-icons';
 
-import { theme } from '../theme';
+import { ClassData, subscribeClasses } from '../../../src/lib/classes';
+import { LABS, RADIUS_OPTIONS } from '../../../src/lib/geo';
 import {
   resolveParticipantUids,
   type ClassParticipant,
   type SessionInput,
 } from '../../../src/services/assistant-service';
-import { ClassData, subscribeClasses } from '../../../src/lib/classes';
+import { theme } from '../theme';
+
 
 interface SessionFormModalProps {
   visible: boolean;
@@ -36,6 +37,8 @@ const MONTH_NAMES = [
 ];
 
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+
+const DEFAULT_RADIUS = 50;
 
 const TIME_OPTIONS: string[] = [];
 for (let h = 7; h <= 20; h++) {
@@ -56,6 +59,8 @@ function getGMT7Date(): Date {
   return new Date(utcMs + 7 * 3600000);
 }
 
+const normalizeLabName = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+
 export function SessionFormModal({
   visible,
   mode,
@@ -70,6 +75,8 @@ export function SessionFormModal({
   const [classId, setClassId] = useState('');
   const [className, setClassName] = useState('');
   const [room, setRoom] = useState('');
+  const [labId, setLabId] = useState('');
+  const [radiusM, setRadiusM] = useState<number>(DEFAULT_RADIUS);
   const [description, setDescription] = useState('');
   const [participantIds, setParticipantIds] = useState<string[]>([]);
 
@@ -80,7 +87,7 @@ export function SessionFormModal({
   const [startTime, setStartTime] = useState('13:00');
   const [endTime, setEndTime] = useState('15:00');
   
-  const [activePicker, setActivePicker] = useState<'course' | 'class' | 'start' | 'end' | null>(null);
+  const [activePicker, setActivePicker] = useState<'course' | 'class' | 'lab' | 'start' | 'end' | null>(null);
 
   const [mapping, setMapping] = useState<{
     mapped: number;
@@ -106,6 +113,8 @@ export function SessionFormModal({
     setClassId(initialData?.classId || '');
     setClassName(initialData?.className || '');
     setRoom(initialData?.room || '');
+    setLabId(initialData?.labId || '');
+    setRadiusM(initialData?.radiusM ?? DEFAULT_RADIUS);
     setDescription(initialData?.description || '');
     setParticipantIds(initialData?.participantIds || []);
     setMapping(null);
@@ -145,6 +154,8 @@ export function SessionFormModal({
     .filter((cls) => !courseName || !cls.course || cls.course.toLowerCase() === courseName.toLowerCase())
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  const selectedLab = LABS.find((l) => l.id === labId);
+
   const handleSelectCourse = (course: string) => {
     setCourseName(course);
     const available = classes.filter((c) => c.course === course);
@@ -161,7 +172,14 @@ export function SessionFormModal({
     const requestId = ++mappingRequest.current;
     setClassName(c.name);
     setClassId(c.id);
-    if (c.room) setRoom(c.room);
+    if (c.room) {
+      setRoom(c.room);
+      // Pilih lab otomatis kalau nama lab sama dengan ruangan kelas (mis. "Lab C")
+      const match = LABS.find(
+        (l) => normalizeLabName(l.name) === normalizeLabName(c.room as string)
+      );
+      if (match) setLabId(match.id);
+    }
 
     if (c.participants.length === 0) {
       setParticipantIds([]);
@@ -242,6 +260,7 @@ export function SessionFormModal({
     if (!courseName.trim()) return setError('Pilih Mata Kuliah terlebih dahulu.');
     if (!className.trim()) return setError('Pilih Kelas Praktikum terlebih dahulu.');
     if (!room.trim()) return setError('Ruangan praktikum wajib diisi.');
+    if (!labId) return setError('Pilih Laboratorium sebagai lokasi presensi.');
     
     const today = getGMT7Date();
     today.setHours(0, 0, 0, 0);
@@ -266,6 +285,8 @@ export function SessionFormModal({
         dateLabel: dateLabelFormatted,
         timeRange: timeRangeFormatted,
         room: room.trim(),
+        labId,
+        radiusM,
         description: description.trim(),
         participantIds,
         date: selectedDate,
@@ -315,6 +336,13 @@ export function SessionFormModal({
         label: `${c.name} (${c.room || 'Lab'})`,
         value: c.name,
         onPress: () => void handleSelectClass(c)
+      }));
+    } else if (activePicker === 'lab') {
+      title = 'Pilih Laboratorium';
+      options = LABS.map(l => ({
+        label: l.name,
+        value: l.id,
+        onPress: () => setLabId(l.id)
       }));
     } else if (activePicker === 'start') {
       title = 'Jam Mulai';
@@ -430,6 +458,40 @@ export function SessionFormModal({
             </View>
 
             <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Laboratorium (Lokasi Presensi)</Text>
+              <Pressable style={styles.dropdownInput} onPress={() => setActivePicker('lab')}>
+                <Text style={[styles.dropdownInputText, !selectedLab && { color: '#94A3B8' }]}>
+                  {selectedLab?.name || 'Pilih Laboratorium'}
+                </Text>
+                <Ionicons name="location-outline" size={18} color="#64748B" />
+              </Pressable>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Radius Presensi</Text>
+              <View style={styles.chipRow}>
+                {RADIUS_OPTIONS.map((r) => {
+                  const selected = radiusM === r;
+                  return (
+                    <Pressable
+                      key={r}
+                      disabled={busy}
+                      onPress={() => setRadiusM(r)}
+                      style={[styles.radiusChip, selected && styles.radiusChipSelected]}
+                    >
+                      <Text style={[styles.radiusChipText, selected && styles.radiusChipTextSelected]}>
+                        {r} m
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Text style={styles.hintText}>
+                Praktikan harus berada dalam radius ini dari lab untuk bisa presensi.
+              </Text>
+            </View>
+
+            <View style={styles.fieldGroup}>
               <Text style={styles.label}>Tanggal Praktikum</Text>
               <Pressable style={styles.dropdownInput} onPress={() => setShowCalendar(!showCalendar)}>
                 <Text style={styles.dropdownInputText}>{formatIndonesianDate(selectedDate)}</Text>
@@ -522,6 +584,12 @@ const styles = StyleSheet.create({
   dropdownInputText: { fontSize: 14, color: '#1B2A4E', fontWeight: '500' },
   multilineInput: { minHeight: 70, textAlignVertical: 'top' },
   mappingText: { fontSize: 12, color: '#15803D', marginTop: 8, fontWeight: '600' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  radiusChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, backgroundColor: '#F1F5F9' },
+  radiusChipSelected: { backgroundColor: '#1B2A4E' },
+  radiusChipText: { fontSize: 13, fontWeight: '700', color: '#64748B' },
+  radiusChipTextSelected: { color: '#FFFFFF' },
+  hintText: { fontSize: 12, color: '#64748B', marginTop: 8 },
   calendarContainer: { marginTop: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16, padding: 16, elevation: 2 },
   calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingHorizontal: 4 },
   calendarNavButton: { padding: 6 },

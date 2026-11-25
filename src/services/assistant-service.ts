@@ -16,15 +16,16 @@ import {
 } from 'firebase/firestore';
 
 import { auth, db } from '@/lib/firebase';
+import { normalizeNim } from '@/utils/nim';
+import { hasRole } from '@/utils/roles';
+import { getSessionStatus, normalizeSessionStatus } from '@/utils/session-status';
 import type {
   Attendance,
   PermissionRequestItem,
   Session,
 } from '../../features/asisten/types';
 import { classifyReason } from './ai/classifier';
-import { normalizeNim } from '@/utils/nim';
-import { hasRole } from '@/utils/roles';
-import { getSessionStatus, normalizeSessionStatus } from '@/utils/session-status';
+import { notifyUsers } from './notification-service';
 
 export type SessionInput = {
   courseName: string;
@@ -40,6 +41,8 @@ export type SessionInput = {
   dateTimestamp?: Timestamp;
   startTime?: string;
   endTime?: string;
+  labId?: string;
+  radiusM?: number;
 };
 
 // In-memory cache for user profile resolution (UID -> { name, nim })
@@ -192,6 +195,9 @@ export async function createSession(
       dateTimestamp: dateTimestamp,
       startTime: input.startTime?.trim() || '',
       endTime: input.endTime?.trim() || '',
+      // Lab dan radius presensi (SRS-32). Hanya disimpan kalau dipilih,
+      // karena Firestore menolak nilai undefined.
+      ...(input.labId ? { labId: input.labId, radiusM: input.radiusM ?? 50 } : {}),
       createdAt: serverTimestamp(),
     });
 
@@ -254,6 +260,8 @@ export async function updateSession(
   }
   if (input.startTime !== undefined) updatePayload.startTime = input.startTime.trim();
   if (input.endTime !== undefined) updatePayload.endTime = input.endTime.trim();
+  if (input.labId !== undefined) updatePayload.labId = input.labId;
+  if (input.radiusM !== undefined) updatePayload.radiusM = input.radiusM;
   if (input.date !== undefined || input.dateTimestamp !== undefined) {
     let dateTs: Timestamp;
     if (input.dateTimestamp instanceof Timestamp) dateTs = input.dateTimestamp;
@@ -372,6 +380,8 @@ export function subscribeAssistantSessions(
           endTime: raw.endTime ?? '',
           timeRange: raw.timeRange ?? `${raw.startTime ?? ''} - ${raw.endTime ?? ''}`,
           room: raw.room ?? '',
+          labId: raw.labId,
+          radiusM: raw.radiusM,
           assistantId: raw.assistantId ?? '',
           assistantName: raw.assistantName ?? '',
           status: normalizeSessionStatus(raw.status) ?? 'upcoming',
@@ -603,5 +613,24 @@ export async function decidePermissionRequest(
     decidedAt: serverTimestamp(),
     decisionNote: decisionNote.trim(),
   });
-}
 
+  // SRS-35: beri tahu praktikan pemilik izin. Kegagalan notifikasi tidak boleh
+  // membatalkan keputusan yang sudah tersimpan.
+  try {
+    const approved = decision === 'approved';
+    const course = current.session?.courseName ?? 'praktikum';
+    const date = current.session?.dateLabel ? ` (${current.session.dateLabel})` : '';
+    const note = decisionNote.trim();
+
+    await notifyUsers([current.practitionerId], {
+      type: approved ? 'izin_diterima' : 'izin_ditolak',
+      title: approved ? 'Izin diterima' : 'Izin ditolak',
+      body:
+        `Pengajuan izin ${course}${date} ${approved ? 'disetujui' : 'ditolak'}.` +
+        (note ? ` Catatan: ${note}` : ''),
+      sessionId: current.sessionId,
+    });
+  } catch {
+    // Notifikasi gagal terkirim; keputusan tetap berlaku.
+  }
+}

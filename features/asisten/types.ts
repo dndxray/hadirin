@@ -29,6 +29,8 @@ export interface Session {
   endTime: string;     // 'HH:mm'
   timeRange?: string;   // '13.00–15.00 WIB'
   room: string;
+  labId?: string;
+  radiusM?: number;
   assistantId?: string;
   assistantName?: string;
   status: SessionStatus;
