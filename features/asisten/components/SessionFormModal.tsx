@@ -302,19 +302,7 @@ export function SessionFormModal({
     }
   };
 
-  const nowGMT7 = getGMT7Date();
-  const isToday = selectedDate.getDate() === nowGMT7.getDate() && 
-                  selectedDate.getMonth() === nowGMT7.getMonth() && 
-                  selectedDate.getFullYear() === nowGMT7.getFullYear();
-
-  const currentTimeStr = `${nowGMT7.getHours().toString().padStart(2, '0')}:${nowGMT7.getMinutes().toString().padStart(2, '0')}`;
-
-  const availableStartTimes = TIME_OPTIONS.filter((t) => {
-    if (t >= endTime) return false;
-    if (isToday && t <= currentTimeStr) return false;
-    return true;
-  });
-
+  const availableStartTimes = TIME_OPTIONS.slice(0, -1);
   const availableEndTimes = TIME_OPTIONS.filter((t) => t > startTime);
 
   const renderPickerModal = () => {
