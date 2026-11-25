@@ -20,8 +20,25 @@ service cloud.firestore {
       return hasRole('asisten');
     }
 
+    function isPraktikan() {
+      return hasRole('praktikan');
+    }
+
     function validNim(data) {
       return !('nim' in data) || (data.nim is string && data.nim.matches('^[A-Z0-9][A-Z0-9._/-]{2,29}$'));
+    }
+
+    // Data lab (koleksi milik SRS-22)
+    function validLab(data) {
+      return data.keys().hasOnly(['name', 'latitude', 'longitude', 'radiusMeters'])
+        && data.keys().hasAll(['name', 'latitude', 'longitude', 'radiusMeters'])
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.latitude is number
+        && data.latitude >= -90 && data.latitude <= 90
+        && data.longitude is number
+        && data.longitude >= -180 && data.longitude <= 180
+        && data.radiusMeters is number
+        && data.radiusMeters >= 1 && data.radiusMeters <= 1000;
     }
 
     // Profil akun
@@ -44,25 +61,35 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Laboratorium
+    match /labs/{labId} {
+      allow read: if signedIn();
+      allow create, update: if isAsisten() && validLab(request.resource.data);
+      allow delete: if isAsisten();
+    }
+
     // Kelas dan peserta
     match /classes/{classId} {
       allow read: if signedIn();
       allow create, update, delete: if isAsisten();
     }
 
-    // Mata kuliah
+    // Mata kuliah. Dua nama koleksi diizinkan supaya cocok dengan yang dipakai
+    // aplikasi; hapus salah satunya kalau sudah dipastikan tidak terpakai.
     match /courses/{id} {
       allow read: if signedIn();
       allow create, update, delete: if isAsisten();
     }
 
-    function isPraktikan() {
-      return hasRole('praktikan');
+    match /matkul/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAsisten();
     }
+
     function sessionData(id) {
       return get(/databases/$(database)/documents/sessions/$(id)).data;
     }
-    
+
     function participant(id) {
       return isPraktikan() && request.auth.uid in sessionData(id).participantIds;
     }
@@ -101,12 +128,12 @@ service cloud.firestore {
 
     // Pengajuan Izin
     match /permissionRequests/{id} {
-      // Asisten bisa baca semua, Praktikan cuma baca miliknya sendiri
+      // Asisten bisa baca semua, praktikan hanya miliknya sendiri
       allow get: if isAsisten() || (isPraktikan() &&
         (!exists(/databases/$(database)/documents/permissionRequests/$(id)) || resource.data.practitionerId == request.auth.uid));
       allow list: if isAsisten() || (isPraktikan() && resource.data.practitionerId == request.auth.uid);
-      
-      // Praktikan ngajuin izin
+
+      // Praktikan mengajukan izin
       allow create: if isPraktikan()
         && request.resource.data.keys().hasOnly(['sessionId', 'practitionerId', 'reason', 'status', 'createdAt', 'session', 'ai'])
         && request.resource.data.practitionerId == request.auth.uid
@@ -120,8 +147,8 @@ service cloud.firestore {
         && request.resource.data.ai == {'status': 'pending'}
         && validSummary(request.resource.data)
         && !existsAfter(/databases/$(database)/documents/attendance/$(id));
-        
-      // Asisten ngasih keputusan (Approve/Reject) atau update hasil AI
+
+      // Asisten memutuskan (setuju atau tolak) atau memperbarui hasil AI
       allow update: if isAsisten() && (
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ai'])
           && request.resource.data.ai.keys().hasOnly(['status', 'category', 'error'])
@@ -133,7 +160,20 @@ service cloud.firestore {
           && request.resource.data.decidedBy == request.auth.uid
           && request.resource.data.decidedAt == request.time)
       );
-      
+
+      allow delete: if false;
+    }
+
+    // Notifikasi in-app
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && resource.data.toUserId == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.toUserId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create: if isAsisten()
+        && request.resource.data.keys().hasOnly(['toUserId', 'type', 'title', 'body', 'sessionId', 'createdAt', 'read'])
+        && request.resource.data.toUserId is string
+        && request.resource.data.read == false;
       allow delete: if false;
     }
   }
