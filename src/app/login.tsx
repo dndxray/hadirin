@@ -1,3 +1,4 @@
+import { AuthShell } from '@/components/auth-layout';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
@@ -6,7 +7,6 @@ import {
   AuthButton,
   AuthError,
   AuthField,
-  AuthShell,
   authColors,
 } from '@/components/auth-ui';
 import { useApp } from '@/context/app-context';
@@ -48,9 +48,7 @@ export default function LoginScreen() {
 
   return (
     <AuthShell
-      eyebrow="MULAI SEKARANG"
       title="Selamat Datang"
-      subtitle="Masuk untuk mencatat dan mengelola kehadiran praktikum dengan mudah."
       footer={
         <Pressable onPress={() => router.replace('/daftar')}>
           <Text style={{ color: authColors.muted, fontSize: 13 }}>

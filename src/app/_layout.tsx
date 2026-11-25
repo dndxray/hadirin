@@ -1,8 +1,12 @@
 import {
+  MuseoModerno_700Bold,
+  useFonts,
+} from '@expo-google-fonts/museomoderno';
+import {
   DarkTheme,
   DefaultTheme,
-  ThemeProvider,
   Stack,
+  ThemeProvider,
 } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useSyncExternalStore } from 'react';
@@ -60,8 +64,9 @@ function RootNavigator() {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const mounted = useSyncExternalStore(subscribeHydration, () => true, () => false);
+  const [fontsLoaded, fontError] = useFonts({ MuseoModerno_700Bold });
 
-  if (!mounted) {
+  if (!mounted || (!fontsLoaded && !fontError)) {
     return null;
   }
 
