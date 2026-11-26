@@ -34,17 +34,17 @@ type Predictor = (text: string) => SentimentPrediction | Promise<SentimentPredic
 function detectStrongDomainSignal(reason: string): SentimentLabel | null {
   const text = reason.toLowerCase();
 
-  // 1. Prestasi / Lomba / Tugas Kampus / Akademik -> 'positif'
+  // Prestasi / Lomba / Tugas Kampus / Akademik -> 'positif'
   if (/(lomba|kompetisi|delegasi|seminar|konferensi|beasiswa|juara|prestasi|pelatihan|workshop|dinas)/.test(text)) {
     return 'positif';
   }
 
-  // 2. Halangan kesehatan / kondisi medis / musibah -> 'negatif'
+  // Halangan kesehatan / kondisi medis / musibah -> 'negatif'
   if (/(sakit|demam|flu|batuk|pusing|mual|muntah|opname|rawat|rs|rumah sakit|dokter|kecelakaan|musibah|duka|meninggal|operasi|terpapar|lemas|tipes|tifus|kurang enak badan|drop|istirahat|bedrest)/.test(text)) {
     return 'negatif';
   }
 
-  // 3. Acara / urusan keluarga / kendala logistik -> 'netral'
+  // Acara / urusan keluarga / kendala logistik -> 'netral'
   if (/(keluarga|acara|urusan|kendala|kendaraan|hujan|banjir|macet|kereta|pesawat|perjalanan|keperluan|pernikahan|nikahan)/.test(text)) {
     return 'netral';
   }
