@@ -1,53 +1,50 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, query, onSnapshot } from 'firebase/firestore';
-
+import { AsistenSessionCard } from '@/components/asisten-session-card';
 import { authColors } from '@/components/auth-ui';
-import { StateView } from '@/components/state-view';
+import { HomeIllustration } from '@/components/home-illustration';
+import { QuickIllustration, type QuickKind } from '@/components/quick-menu-illustrations';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { getSessionStatus } from '@/utils/session-status';
-import { SessionFormModal } from '../../features/asisten/components/SessionFormModal';
 import { createSession, syncSessionStatuses } from '@/services/assistant-service';
-import { hasRole } from '@/utils/roles';
+import { todayLabel as formatTodayLabel, greeting } from '@/utils/home-format';
+import { dayStartMs, sessionMs } from '@/utils/schedule';
+import { getSessionStatus } from '@/utils/session-status';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SessionFormModal } from '../../features/asisten/components/SessionFormModal';
 
-const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-const MONTHS = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-];
+type Entry = { session: any; status: string; ms: number };
 
-const STATUS_UI = {
-  open: { label: 'Dibuka', dot: '#22C55E', bg: '#E6F6EC', fg: '#15803D' },
-  upcoming: { label: 'Belum Dibuka', dot: '#94A3B8', bg: '#EEF1F6', fg: '#64748B' },
-  closed: { label: 'Ditutup', dot: '#EF4444', bg: '#FEE2E2', fg: '#B91C1C' },
-};
-
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 11) return 'Selamat Pagi!';
-  if (h < 15) return 'Selamat Siang!';
-  if (h < 18) return 'Selamat Sore!';
-  return 'Selamat Malam!';
-}
-
-function todayLabel() {
-  const d = new Date();
-  return `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-function initials(text: string) {
+function QuickAction({
+  kind,
+  label,
+  onPress,
+}: {
+  kind: QuickKind;
+  label: string;
+  onPress: () => void;
+}) {
   return (
-    text
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join('')
-      .toUpperCase() || '?'
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [styles.quickItem, pressed && { opacity: 0.7 }]}
+    >
+      <QuickIllustration kind={kind} />
+      <Text style={styles.quickLabel}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -56,163 +53,187 @@ export function AsistenHome() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
-  
+
   const [classes, setClasses] = useState<any[]>([]);
-  const [totalPraktikan, setTotalPraktikan] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     const qSessions = query(collection(db, 'sessions'));
-    const unsubSessions = onSnapshot(qSessions, (snapshot) => {
-      const classData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setClasses(classData);
-      setLoading(false);
-      void syncSessionStatuses(classData);
-    }, (error) => {
-      console.error("Gagal load sesi:", error);
-      setLoading(false);
-    });
-
-    const unsubUsers = onSnapshot(query(collection(db, 'users')), (snapshot) => {
-      const total = snapshot.docs.filter((item) => hasRole(item.data(), 'praktikan')).length;
-      setTotalPraktikan(total);
-    });
+    const unsubSessions = onSnapshot(
+      qSessions,
+      (snapshot) => {
+        const classData = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setClasses(classData);
+        setLoading(false);
+        void syncSessionStatuses(classData);
+      },
+      (error) => {
+        console.error('Gagal load sesi:', error);
+        setLoading(false);
+      }
+    );
 
     return () => {
       unsubSessions();
-      unsubUsers();
     };
   }, []);
 
-  const name = profile?.name ?? '';
-  const firstName = name.split(/\s+/)[0] || 'Asisten';
-  const courseCount = new Set(classes.map((c) => c.courseName)).size;
+  // Hitung ulang tiap menit supaya status dan pergantian hari ikut ter-update
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Home hanya menampilkan jadwal HARI INI. Jadwal satu minggu ada di halaman Jadwal.
+  const today = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+
+    const q = search.trim().toLowerCase();
+    const entries: Entry[] = [];
+    for (const session of classes) {
+      const ms = sessionMs(session);
+      if (ms === null) continue;
+
+      const status = getSessionStatus(session) as string;
+
+      // Sesi yang masih dibuka tetap tampil walau tanggalnya bukan hari ini
+      const isToday = ms >= todayStart.getTime() && ms < todayEnd.getTime();
+      if (status !== 'open' && !isToday) continue;
+
+      if (q) {
+        const hit =
+          String(session.courseName ?? '').toLowerCase().includes(q) ||
+          String(session.className ?? '').toLowerCase().includes(q) ||
+          String(session.room ?? '').toLowerCase().includes(q);
+        if (!hit) continue;
+      }
+      entries.push({ session, status, ms });
+    }
+
+    // Yang sedang dibuka paling atas, lalu urut jam mulai
+    return entries.sort(
+      (a, b) =>
+        (a.status === 'open' ? 0 : 1) - (b.status === 'open' ? 0 : 1) ||
+        dayStartMs(a.ms) - dayStartMs(b.ms) ||
+        String(a.session.startTime ?? '').localeCompare(String(b.session.startTime ?? ''))
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classes, search, tick]);
+
+  const firstName = (profile?.name ?? '').split(/\s+/)[0] || 'Asisten';
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.container}>
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 130 }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <View style={[styles.header, { paddingTop: insets.top + 36 }]}>
-          <View style={[styles.inner, styles.headerRow]}>
-            <View style={{ flex: 1 }}>
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
+          <View style={styles.headerCircleA} />
+          <View style={styles.headerCircleB} />
+          <View style={styles.headerRow}>
+            <View style={styles.headerText}>
               <Text style={styles.greeting}>{greeting()}</Text>
-              <Text style={styles.hello}>Hai, {firstName}</Text>
+              <Text style={styles.name} numberOfLines={1}>
+                Hai, {firstName}
+              </Text>
             </View>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials(name)}</Text>
-            </View>
+            <HomeIllustration />
           </View>
         </View>
 
-        <View style={styles.body}>
-          <View style={styles.inner}>
-            <View style={styles.summary}>
-              <View style={styles.summaryItem}>
-                <View style={styles.summaryIcon}>
-                  <Ionicons name="document-text-outline" size={18} color={authColors.navy} />
-                </View>
-                <Text style={styles.summaryText}>{courseCount} Praktikum</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <View style={styles.summaryIcon}>
-                  <Ionicons name="people-outline" size={18} color={authColors.navy} />
-                </View>
-                <Text style={styles.summaryText}>{totalPraktikan} Praktikan</Text>
-              </View>
-            </View>
-            
-            {/* TOMBOL TAMBAH SESI YANG HILANG */}
-            <Pressable 
-              onPress={() => setShowAddModal(true)}
-              style={{ 
-                flexDirection: 'row', 
-                backgroundColor: '#1B2A4E', 
-                paddingVertical: 14, 
-                borderRadius: 16, 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                marginTop: 16,
-                marginBottom: 16 
-              }}
-            >
-              <Ionicons name="add" size={20} color="#FFF" />
-              <Text style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 8 }}>Tambah Jadwal Sesi</Text>
-            </Pressable>
-
-            <Text style={styles.sectionTitle}>Jadwal Praktikum</Text>
-
-            <View style={styles.dateBanner}>
-              <View style={styles.dateIcon}>
-                <Ionicons name="calendar-outline" size={22} color={authColors.white} />
-              </View>
-              <View>
-                <Text style={styles.dateTitle}>{todayLabel()}</Text>
-                <Text style={styles.dateSub}>{classes.length} sesi terjadwal</Text>
-              </View>
-            </View>
-
-            {loading ? (
-              <ActivityIndicator size="large" color={authColors.navy} style={{ marginTop: 20 }} />
-            ) : classes.length === 0 ? (
-              <StateView
-                kind="empty"
-                title="Belum ada jadwal praktikum"
-                message="Sesi yang kamu buat akan muncul di sini."
-              />
-            ) : (
-              classes.map((c) => {
-                const statusType = getSessionStatus(c); 
-                const st = STATUS_UI[statusType];
-                const participantCount = c.participantIds?.length || c.participants?.length || 0;
-
-                return (
-                  <Pressable
-                    key={c.id}
-                    style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
-                    onPress={() => router.push(`/detail-sesi?id=${c.id}` as any)}
-                  >
-                    <View style={[styles.chip, { backgroundColor: st.bg }]}>
-                      <View style={[styles.chipDot, { backgroundColor: st.dot }]} />
-                      <Text style={[styles.chipText, { color: st.fg }]}>{st.label}</Text>
-                    </View>
-
-                    <View style={styles.cardTop}>
-                      <View style={styles.cardAvatar}>
-                        <Text style={styles.cardAvatarText}>{initials(c.courseName || '')}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.cardTitle} numberOfLines={2}>
-                          {c.courseName}
-                        </Text>
-                        <Text style={styles.cardSub}>
-                          {c.className} · {c.room}
-                        </Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={22} color={authColors.ink} />
-                    </View>
-
-                    <View style={styles.divider} />
-
-                    <View style={styles.footer}>
-                      <View style={styles.timeRow}>
-                        <Ionicons name="time-outline" size={14} color={authColors.muted} />
-                        <Text style={styles.timeText}>
-                          {c.dateLabel || 'Tanggal belum diatur'} · {c.timeRange || `${c.startTime || '--'} - ${c.endTime || '--'}`}
-                        </Text>
-                      </View>
-                      {participantCount > 0 ? (
-                        <Text style={styles.presentText}>
-                          <Text style={styles.presentNumber}>{participantCount}</Text> Praktikan
-                        </Text>
-                      ) : null}
-                    </View>
-                  </Pressable>
-                );
-              })
-            )}
+        {/* Pencarian (menimpa tepi bawah header) */}
+        <View style={styles.searchWrap}>
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color="#94A3B8" />
+            <TextInput
+              placeholder="Cari mata praktikum"
+              placeholderTextColor="#94A3B8"
+              style={styles.searchInput}
+              value={search}
+              onChangeText={setSearch}
+              accessibilityLabel="Cari mata praktikum"
+            />
           </View>
+        </View>
+
+        {/* Menu cepat asisten */}
+        <View style={styles.quickCard}>
+          <QuickAction
+            kind="jadwal"
+            label="Jadwal"
+            onPress={() => router.push('/jadwalasisten' as any)}
+          />
+          <QuickAction kind="kelas" label="Kelas" onPress={() => router.push('/kelas' as any)} />
+          <QuickAction kind="izin" label="Izin" onPress={() => router.push('/permissions' as any)} />
+          <QuickAction kind="maps" label="Maps" onPress={() => router.push('/maps' as any)} />
+        </View>
+
+        {/* Tombol tambah sesi */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Tambah jadwal sesi"
+          onPress={() => setShowAddModal(true)}
+          style={({ pressed }) => [styles.addButton, pressed && { opacity: 0.85 }]}
+        >
+          <Ionicons name="add" size={20} color="#FFFFFF" />
+          <Text style={styles.addButtonText}>Tambah Jadwal Sesi</Text>
+        </Pressable>
+
+        {/* Jadwal hari ini */}
+        <View style={styles.schedule}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Jadwal Praktikum</Text>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="Lihat semua jadwal"
+              hitSlop={8}
+              onPress={() => router.push('/jadwalasisten' as any)}
+            >
+              <Text style={styles.seeAll}>Lihat Semua</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.dateCard}>
+            <View style={styles.dateIconBg}>
+              <Ionicons name="calendar" size={20} color="#FFFFFF" />
+            </View>
+            <View>
+              <Text style={styles.dateText}>{formatTodayLabel()}</Text>
+              <Text style={styles.dateSubText}>{today.length} sesi terjadwal hari ini</Text>
+            </View>
+          </View>
+
+          {loading ? (
+            <ActivityIndicator size="large" color={authColors.navy} style={{ marginTop: 20 }} />
+          ) : today.length === 0 ? (
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyText}>
+                {search.trim()
+                  ? `Tidak ada praktikum hari ini untuk "${search.trim()}".`
+                  : 'Tidak ada praktikum hari ini.'}
+              </Text>
+              <Pressable
+                accessibilityRole="link"
+                hitSlop={8}
+                onPress={() => router.push('/jadwalasisten' as any)}
+              >
+                <Text style={styles.emptyLink}>Lihat jadwal minggu ini</Text>
+              </Pressable>
+            </View>
+          ) : (
+            today.map((entry) => (
+              <AsistenSessionCard key={entry.session.id} session={entry.session} />
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -234,130 +255,120 @@ export function AsistenHome() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: authColors.background },
-  inner: { width: '100%', maxWidth: 560, alignSelf: 'center' },
+  container: { flex: 1, backgroundColor: '#F4F7FB' },
 
+  // Header (sama dengan Home praktikan)
   header: {
-    backgroundColor: authColors.navy,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    backgroundColor: '#1B2A4E',
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
     paddingHorizontal: 24,
-    paddingBottom: 80,
+    paddingBottom: 56,
+    overflow: 'hidden',
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  greeting: { color: '#B6C2DB', fontSize: 14 },
-  hello: { color: authColors.white, fontSize: 32, fontWeight: '800', marginTop: 2 },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: '#F6D9C9',
-    alignItems: 'center',
-    justifyContent: 'center',
+  headerCircleA: {
+    position: 'absolute',
+    top: -60,
+    right: -40,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(96,165,250,0.18)',
   },
-  avatarText: { color: '#8B4A2B', fontWeight: '800', fontSize: 16 },
+  headerCircleB: {
+    position: 'absolute',
+    bottom: -70,
+    left: -50,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerText: { flex: 1, paddingRight: 8 },
+  greeting: { color: '#CBD5E1', fontSize: 15, marginBottom: 4 },
+  name: { color: '#FFFFFF', fontSize: 32, fontWeight: '800' },
 
-  body: { paddingHorizontal: 20, marginTop: -52 },
-
-  summary: {
-    flexDirection: 'row',
-    backgroundColor: authColors.white,
-    borderRadius: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    justifyContent: 'space-around',
-    shadowColor: '#1B2A4E',
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
-  },
-  summaryItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  summaryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#E8EEF9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  summaryText: { color: authColors.ink, fontSize: 13, fontWeight: '700' },
-
-  sectionTitle: {
-    color: authColors.ink,
-    fontSize: 22,
-    fontWeight: '800',
-    marginTop: 10,
-    marginBottom: 14,
-  },
-
-  dateBanner: {
+  // Pencarian
+  searchWrap: { paddingHorizontal: 24, marginTop: -28 },
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    backgroundColor: '#E3E9F5',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
-  },
-  dateIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: authColors.navy,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dateTitle: { color: authColors.ink, fontSize: 16, fontWeight: '800' },
-  dateSub: { color: '#6B7FBF', fontSize: 12, marginTop: 2 },
-
-  card: {
-    backgroundColor: authColors.white,
+    backgroundColor: '#FFFFFF',
     borderRadius: 18,
-    padding: 16,
-    paddingTop: 20,
-    marginBottom: 14,
+    paddingHorizontal: 16,
+    height: 54,
     shadowColor: '#1B2A4E',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 5,
+  },
+  searchInput: { flex: 1, marginLeft: 12, fontSize: 15, color: authColors.navy },
+
+  // Menu cepat
+  quickCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 24,
+    marginTop: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 8,
+    borderRadius: 22,
+    shadowColor: '#1B2A4E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
     elevation: 3,
   },
-  chip: {
-    position: 'absolute',
-    top: 12,
-    right: 14,
+  quickItem: { alignItems: 'center', gap: 8, minWidth: 64 },
+  quickLabel: { fontSize: 12, fontWeight: '600', color: authColors.ink },
+
+  // Tombol tambah
+  addButton: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-  },
-  chipDot: { width: 6, height: 6, borderRadius: 3 },
-  chipText: { fontSize: 10, fontWeight: '700' },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 8 },
-  cardAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 14,
-    backgroundColor: authColors.navy,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#1B2A4E',
+    marginHorizontal: 24,
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 18,
   },
-  cardAvatarText: { color: authColors.white, fontWeight: '800', fontSize: 15 },
-  cardTitle: { color: authColors.ink, fontSize: 16, fontWeight: '800' },
-  cardSub: { color: authColors.muted, fontSize: 12, marginTop: 2 },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: authColors.border, marginVertical: 14 },
-  footer: {
+  addButtonText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
+
+  // Jadwal
+  schedule: { paddingHorizontal: 24, paddingTop: 24 },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  sectionTitle: { fontSize: 20, fontWeight: '800', color: authColors.ink },
+  seeAll: { fontSize: 13, color: '#2F5BEA', fontWeight: '700' },
+  dateCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 8,
+    backgroundColor: '#E8EDF5',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 16,
   },
-  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  timeText: { color: authColors.muted, fontSize: 12 },
-  presentText: { color: authColors.muted, fontSize: 11 },
-  presentNumber: { color: '#15803D', fontWeight: '800', fontSize: 12 },
+  dateIconBg: {
+    width: 42,
+    height: 42,
+    backgroundColor: '#1B2A4E',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  dateText: { fontSize: 15, fontWeight: '800', color: authColors.ink },
+  dateSubText: { fontSize: 12, color: '#3B4F8C', marginTop: 2 },
+  emptyWrap: { alignItems: 'center', gap: 8, marginTop: 20 },
+  emptyText: { textAlign: 'center', color: '#64748B', lineHeight: 20 },
+  emptyLink: { color: '#2F5BEA', fontWeight: '700', fontSize: 14 },
 });

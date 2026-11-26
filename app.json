@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "hadirin",
@@ -18,7 +19,9 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.dindaisyrn.hadirin"
+      "package": "com.dindaisyrn.hadirin",
+      "googleServicesFile": "./google-services.json",
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "output": "single",
@@ -26,30 +29,23 @@
     },
     "plugins": [
       "expo-router",
-      ["expo-location", {
-        "locationWhenInUsePermission": "Hadirin menggunakan lokasi saat halaman presensi dibuka untuk memeriksa radius laboratorium."
-      }],
-      ["expo-camera", {
-        "cameraPermission": "Hadirin menggunakan kamera untuk memindai QR presensi sesi praktikum.",
-        "recordAudioAndroid": false
-      }],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Hadirin menggunakan lokasi saat halaman presensi dibuka untuk memeriksa radius laboratorium."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Hadirin menggunakan kamera untuk memindai QR presensi sesi praktikum.",
+          "recordAudioAndroid": false
+        }
+      ],
       "expo-notifications",
       "expo-image",
       "expo-status-bar",
       "expo-web-browser",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Izinkan aplikasi menggunakan kamera untuk memindai QR presensi.",
-          "barcodeScannerEnabled": true
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "Izinkan aplikasi menggunakan lokasi untuk memvalidasi presensi di laboratorium."
-        }
-      ],
       [
         "expo-splash-screen",
         {

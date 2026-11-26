@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AttendanceConfirmationModal, type AttendanceModalPhase } from '@/components/attendance-confirmation-modal';
 import { authColors } from '@/components/auth-ui';
+import { BackButton } from '@/components/back-button';
 import { DeviceFeatureBoundary } from '@/components/device-feature-boundary';
 import { StateView } from '@/components/state-view';
 import { BottomTabInset } from '@/constants/theme';
@@ -37,10 +38,11 @@ export default function AttendanceScreen() {
   return <View style={styles.screen}>
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + BottomTabInset + 32 }}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}><View style={styles.inner}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Kembali ke halaman sebelumnya" style={styles.back}
-          onPress={() => router.canGoBack() ? router.back() : router.replace('/home')}>
-          <Ionicons name="arrow-back" size={22} color={authColors.white} /><Text style={styles.backText}>Kembali</Text>
-        </Pressable>
+        <BackButton
+          accessibilityLabel="Kembali ke halaman sebelumnya"
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/home')}
+          style={styles.back}
+        />
         <Text accessibilityRole="header" style={styles.title}>Presensi</Text>
         <Text style={styles.subtitle}>Periksa sesi dan lokasi lab sebelum mencatat kehadiran.</Text>
       </View></View>
@@ -255,8 +257,8 @@ function Action({ label, icon, onPress, disabled, loading, secondary }: {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: authColors.background }, flex: { flex: 1 }, inner: { width: '100%', maxWidth: 600, alignSelf: 'center' },
   header: { paddingHorizontal: 20, paddingBottom: 28, backgroundColor: authColors.navy }, title: { color: authColors.white, fontSize: 30, fontWeight: '800', marginTop: 12 },
-  subtitle: { color: '#D4DEEF', fontSize: 15, lineHeight: 23, marginTop: 8 }, back: { minHeight: 48, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8 },
-  backText: { color: authColors.white, fontSize: 15, fontWeight: '700' }, body: { padding: 20, gap: 12 }, details: { gap: 18, marginTop: 12 },
+  subtitle: { color: '#D4DEEF', fontSize: 15, lineHeight: 23, marginTop: 8 }, back: { marginBottom: 8 },
+  body: { padding: 20, gap: 12 }, details: { gap: 18, marginTop: 12 },
   section: { padding: 18, backgroundColor: authColors.white, borderRadius: 14, gap: 12 }, sectionTitle: { color: authColors.navy, fontSize: 21, lineHeight: 28, fontWeight: '800', marginBottom: 4 },
   sessionOption: { padding: 14, minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: authColors.white, borderWidth: 1, borderColor: authColors.border, borderRadius: 12 },
   selectedOption: { borderColor: authColors.navy, backgroundColor: '#EAF0FA' }, optionTitle: { color: authColors.navy, fontSize: 16, fontWeight: '700', marginBottom: 4 },

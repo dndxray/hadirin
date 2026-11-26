@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  KeyboardAvoidingView,
+  LayoutChangeEvent,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
@@ -15,6 +15,8 @@ import { LoginIllustration } from './login-illustration';
 const SHEET_BG = '#F5F7FA';
 const NAVY = '#1B2A4E';
 const MUTED = '#64748B';
+const WAVE_HEIGHT = 44;
+const FORM_GAP = 16; // jarak antar "Masuk sebagai", Email, Kata sandi, tombol
 
 type Props = {
   children: React.ReactNode;
@@ -26,32 +28,56 @@ type Props = {
 
 export function AuthShell({ children, eyebrow, title, subtitle, footer }: Props) {
   const insets = useSafeAreaInsets();
+  const [heroSize, setHeroSize] = useState({ width: 0, height: 0 });
+
+  // Ukur hero (padding box penuh) supaya Svg latar punya ukuran pixel pasti.
+  const handleHeroLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setHeroSize((prev) =>
+      prev.width === width && prev.height === height ? prev : { width, height },
+    );
+  };
+
+  const ready = heroSize.width > 0 && heroSize.height > 0;
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    // 'padding' di iOS & Android: Android edge-to-edge tidak me-resize window
+    // saat keyboard muncul, jadi harus ditangani manual.
+    <KeyboardAvoidingView style={styles.root} behavior="padding">
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.hero, { paddingTop: insets.top + 28 }]}>
-          <Svg
-            style={StyleSheet.absoluteFill}
-            width="100%"
-            height="100%"
-            preserveAspectRatio="none"
-          >
-            <Defs>
-              <LinearGradient id="heroGradient" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor="#1B2A4E" />
-                <Stop offset="1" stopColor="#2F5AA8" />
-              </LinearGradient>
-            </Defs>
-            <Rect width="100%" height="100%" fill="url(#heroGradient)" />
-          </Svg>
+        <View
+          style={[styles.hero, { paddingTop: insets.top + 28 }]}
+          onLayout={handleHeroLayout}
+        >
+          {ready ? (
+            <Svg
+              style={styles.heroBg}
+              width={heroSize.width}
+              height={heroSize.height}
+              viewBox={`0 0 ${heroSize.width} ${heroSize.height}`}
+              preserveAspectRatio="none"
+              pointerEvents="none"
+            >
+              <Defs>
+                <LinearGradient id="heroGradient" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#1B2A4E" />
+                  <Stop offset="1" stopColor="#2F5AA8" />
+                </LinearGradient>
+              </Defs>
+              <Rect
+                x={0}
+                y={0}
+                width={heroSize.width}
+                height={heroSize.height}
+                fill="url(#heroGradient)"
+              />
+            </Svg>
+          ) : null}
 
           <Text style={styles.brand}>Hadirin</Text>
 
@@ -60,15 +86,18 @@ export function AuthShell({ children, eyebrow, title, subtitle, footer }: Props)
           </View>
 
           {/* Lengkung peralihan ke area form */}
-          <Svg
-            style={styles.wave}
-            width="100%"
-            height={44}
-            viewBox="0 0 360 44"
-            preserveAspectRatio="none"
-          >
-            <Path d="M0 44 L0 20 Q180 -16 360 20 L360 44 Z" fill={SHEET_BG} />
-          </Svg>
+          {ready ? (
+            <Svg
+              style={styles.wave}
+              width={heroSize.width}
+              height={WAVE_HEIGHT}
+              viewBox="0 0 360 44"
+              preserveAspectRatio="none"
+              pointerEvents="none"
+            >
+              <Path d="M0 44 L0 20 Q180 -16 360 20 L360 44 Z" fill={SHEET_BG} />
+            </Svg>
+          ) : null}
         </View>
 
         <View style={styles.sheet}>
@@ -79,7 +108,7 @@ export function AuthShell({ children, eyebrow, title, subtitle, footer }: Props)
               {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
             </View>
 
-            {children}
+            <View style={styles.form}>{children}</View>
 
             {footer ? <View style={styles.footer}>{footer}</View> : null}
           </View>
@@ -99,13 +128,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 36,
     overflow: 'hidden',
+    backgroundColor: NAVY, // fallback sebelum onLayout selesai
   },
-    brand: {
+  heroBg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  brand: {
     color: '#FFFFFF',
     fontSize: 32,
     fontFamily: 'MuseoModerno_700Bold',
     letterSpacing: 0.5,
-    },
+  },
   illustration: {
     width: '100%',
     maxWidth: 400,
@@ -114,7 +149,6 @@ const styles = StyleSheet.create({
   wave: {
     position: 'absolute',
     left: 0,
-    right: 0,
     bottom: -1,
   },
   sheet: {
@@ -129,6 +163,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   heading: { marginBottom: 20 },
+  form: { gap: FORM_GAP },
   eyebrow: {
     color: '#2F5AA8',
     fontSize: 12,

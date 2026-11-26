@@ -62,7 +62,6 @@ export default function DaftarScreen() {
   return (
     <AuthShell
       title="Buat Akun"
-      subtitle="Daftar untuk mulai mencatat dan mengelola kehadiran praktikum."
       footer={
         <Pressable onPress={() => router.replace('/login')}>
           <Text style={{ color: authColors.muted, fontSize: 13 }}>

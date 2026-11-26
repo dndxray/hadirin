@@ -5,6 +5,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Modal, Pressable, ScrollView, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { authColors } from '@/components/auth-ui';
+import { BackButton } from '@/components/back-button';
 import { HistoryDataState } from '@/components/permission-history';
 import { StateView } from '@/components/state-view';
 import { useAttendance } from '@/context/attendance-context';
@@ -79,17 +80,12 @@ export default function PermissionScreen() {
       >
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
           <View style={styles.inner}>
-            <Pressable
-              accessibilityRole="button"
+            <BackButton
               accessibilityLabel="Kembali ke sesi"
-              accessibilityState={{ disabled: busy }}
               disabled={busy}
               onPress={goBack}
-              style={({ pressed }) => [styles.back, pressed && styles.backPressed, busy && styles.faded]}
-            >
-              <Ionicons name="arrow-back" size={22} color={authColors.white} />
-              <Text style={styles.backText}>Kembali</Text>
-            </Pressable>
+              style={styles.back}
+            />
             <Text accessibilityRole="header" style={styles.title}>Pengajuan izin</Text>
             <Text style={styles.subtitle}>Jelaskan ketidakhadiranmu untuk sesi praktikum.</Text>
           </View>
@@ -214,9 +210,7 @@ const styles = StyleSheet.create({
   loadingScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: authColors.background },
   inner: { width: '100%', maxWidth: 560, alignSelf: 'center' },
   header: { backgroundColor: authColors.navy, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, paddingHorizontal: 24, paddingBottom: 28 },
-  back: { minHeight: 44, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, marginLeft: -8, marginBottom: 16, borderRadius: 12 },
-  backPressed: { backgroundColor: '#304064' },
-  backText: { color: authColors.white, fontSize: 14, lineHeight: 22, fontWeight: '600' },
+  back: { marginBottom: 16 },
   title: { color: authColors.white, fontSize: 26, lineHeight: 34, fontWeight: '800' },
   subtitle: { color: '#BBC7DC', fontSize: 14, lineHeight: 22, marginTop: 6 },
   body: { paddingHorizontal: 20, paddingTop: 24 },
