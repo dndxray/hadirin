@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react';
 import { AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { authColors } from '@/components/auth-ui';
 import { LabInfoSheet } from '@/components/lab-info-sheet';
@@ -42,7 +42,7 @@ function Notice({ icon, title, text, tone = 'danger', actionLabel, onAction, dis
 }
 
 export function LabMap() {
-  const webViewRef = useRef<WebView>(null);
+  const webViewRef = useRef<any>(null);
   const [granted, setGranted] = useState(false);
   const [issue, setIssue] = useState<'denied' | 'servicesOff' | 'unavailable' | null>(null);
   const [checking, setChecking] = useState(false);
@@ -160,7 +160,7 @@ export function LabMap() {
         ref={webViewRef}
         style={styles.map}
         source={{ html: mapHtml }}
-        onMessage={(event) => {
+        onMessage={(event: WebViewMessageEvent): void => {
           try {
             const data = JSON.parse(event.nativeEvent.data);
             if (data.type === 'markerClick') { setSelectedId(data.id); } else if (data.type === 'mapClick') { setSelectedId(null); }

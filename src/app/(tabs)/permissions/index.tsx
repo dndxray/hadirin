@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BackButton } from '@/components/back-button';
 import { DecisionModal } from '../../../../features/asisten/components/DecisionModal';
 import { PermissionRequestItem } from '../../../../features/asisten/types';
 import { useAuth } from '@/context/auth-context';
@@ -123,8 +124,18 @@ export default function PermissionsScreen() { //utama
         setLoading(false);
         void processPendingPermissionAi(requests);
       },
-      () => {
-        setError('Gagal memuat pengajuan izin. Periksa koneksi Firestore Anda.');
+      (firestoreError) => {
+        const code =
+          'code' in firestoreError && typeof firestoreError.code === 'string'
+            ? firestoreError.code
+            : 'unknown';
+        console.error('Gagal memuat pengajuan izin dari Firestore:', {
+          code,
+          message: firestoreError.message,
+        });
+        setError(
+          `Gagal memuat pengajuan izin (${code}): ${firestoreError.message}`,
+        );
         setLoading(false);
       }
     );
@@ -147,6 +158,7 @@ export default function PermissionsScreen() { //utama
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
         <View style={styles.headerRow}>
+          <BackButton />
           <Text style={styles.headerTitle}>Pemeriksaan Izin</Text>
         </View>
       </View>
@@ -204,8 +216,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F5F7FA' },
   header: { backgroundColor: '#1B2A4E', paddingBottom: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
   headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 12, maxWidth: 560, alignSelf: 'center', width: '100%' },
-  backButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
+  headerTitle: { flex: 1, color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
 
   listContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 100, maxWidth: 560, alignSelf: 'center', width: '100%' },
   disclaimer: { fontSize: 12, color: '#64748B', marginBottom: 16, lineHeight: 18 },

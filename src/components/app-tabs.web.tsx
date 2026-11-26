@@ -1,23 +1,26 @@
 import { Ionicons } from '@expo/vector-icons';
 import {
-  Tabs,
   TabList,
-  TabTrigger,
-  TabSlot,
-  TabTriggerSlotProps,
   TabListProps,
+  Tabs,
+  TabSlot,
+  TabTrigger,
+  TabTriggerSlotProps,
 } from 'expo-router/ui';
+import { usePathname } from 'expo-router';
 import {
   Pressable,
-  type PressableProps,
+  StyleSheet,
+  Text,
   useWindowDimensions,
   View,
-  Text,
-  StyleSheet,
+  type PressableProps,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { authColors } from '@/components/auth-ui';
 import { useRole, type Role } from '@/hooks/use-role';
+
 import { ThemedText } from './themed-text';
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -28,39 +31,24 @@ export default function AppTabs() {
   return (
     <Tabs style={{ flex: 1 }}>
       <TabSlot style={{ flex: 1, width: '100%' }} />
-
       <TabList asChild>
         <CustomTabList userRole={role}>
+          <TabTrigger name="home" href="/home" asChild>
+            <TabButton icon="home" label="Home" />
+          </TabTrigger>
           {role === 'asisten' ? (
             <>
-              <TabTrigger name="home" href="/home" asChild>
-                <TabButton icon="home" label="Home" />
-              </TabTrigger>
-              <TabTrigger name="kelas" href="/kelas" asChild>
-                <TabButton icon="school" label="Kelas" />
-              </TabTrigger>
-              <TabTrigger name="permissions" href="/permissions" asChild>
-                <TabButton icon="document-text" label="Izin" />
-              </TabTrigger>
+              <TabTrigger name="kelas" href="/kelas" style={styles.hidden} />
+              <TabTrigger name="permissions" href="/permissions" style={styles.hidden} />
+              <TabTrigger name="maps" href="/maps" style={styles.hidden} />
             </>
           ) : (
             <>
-              <TabTrigger name="home" href="/home" asChild>
-                <TabButton icon="home" label="Home" />
-              </TabTrigger>
-              <TabTrigger name="explore" href="/explore" asChild>
-                <TabButton icon="clipboard" label="Riwayat" />
-              </TabTrigger>
-              <TabTrigger name="presensi" href="/presensi" asChild>
-                <TabButton icon="location" label="Presensi" />
-              </TabTrigger>
+              <TabTrigger name="explore" href="/explore" style={styles.hidden} />
+              <TabTrigger name="presensi" href="/presensi" style={styles.hidden} />
+              <TabTrigger name="maps" href="/maps" style={styles.hidden} />
             </>
           )}
-
-          <TabTrigger name="maps" href="/maps" asChild>
-            <TabButton icon="map" label="Maps" />
-          </TabTrigger>
-
           <TabTrigger name="profil" href="/profil" asChild>
             <TabButton icon="person" label="Akun" />
           </TabTrigger>
@@ -78,7 +66,6 @@ export function TabButton({
 }: TabTriggerSlotProps & { icon: string; label: string }) {
   const base = icon as string;
   const name = (isFocused ? base : `${base}-outline`) as IconName;
-
   return (
     <Pressable
       {...(props as unknown as PressableProps)}
@@ -88,7 +75,7 @@ export function TabButton({
         <Ionicons
           name={name}
           size={22}
-          color={isFocused ? authColors.white : authColors.muted}
+          color={isFocused ? authColors.navy : authColors.muted}
         />
         <Text style={[styles.label, isFocused && styles.labelActive]}>{label}</Text>
       </View>
@@ -102,20 +89,18 @@ export function CustomTabList({
 }: TabListProps & { userRole: Role }) {
   const insets = useSafeAreaInsets();
   const compact = useWindowDimensions().width < 600;
-
+  const pathname = usePathname();
+  const showTabs = pathname === '/home' || pathname === '/profil';
   return (
-    <View {...props} style={styles.wrap}>
+    <View {...props} style={[styles.wrap, !showTabs && styles.hidden]}>
       <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
         {!compact ? (
           <ThemedText type="smallBold" style={styles.brandText}>
             Hadirin
           </ThemedText>
         ) : null}
-
         {props.children}
-
         {!compact ? <View style={styles.separator} /> : null}
-
         {!compact ? (
           <View style={styles.roleBadge}>
             <View style={styles.roleDot} />
@@ -155,6 +140,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -4 },
     elevation: 10,
   },
+  hidden: { display: 'none' },
   brandText: { marginRight: 8, alignSelf: 'center' },
   separator: {
     width: 1,
@@ -186,7 +172,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 16,
   },
-  pillActive: { backgroundColor: authColors.navy },
+  pillActive: { backgroundColor: '#E8EDF5' },
   label: { color: authColors.muted, fontSize: 11, fontWeight: '600' },
-  labelActive: { color: authColors.white, fontWeight: '700' },
+  labelActive: { color: authColors.navy, fontWeight: '700' },
 });

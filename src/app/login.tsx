@@ -1,3 +1,4 @@
+
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
@@ -14,7 +15,11 @@ import { useApp } from '@/context/app-context';
 import { authErrorMessage, useAuth } from '@/context/auth-context';
 import type { Role } from '@/types/attendance';
 
-const roleOptions: { value: Role; label: string; icon: 'school-outline' | 'clipboard-outline' }[] = [
+const roleOptions: {
+  value: Role;
+  label: string;
+  icon: 'school-outline' | 'clipboard-outline';
+}[] = [
   { value: 'praktikan', label: 'Praktikan', icon: 'school-outline' },
   { value: 'asisten', label: 'Asisten', icon: 'clipboard-outline' },
 ];
@@ -22,6 +27,7 @@ const roleOptions: { value: Role; label: string; icon: 'school-outline' | 'clipb
 export default function LoginScreen() {
   const { login } = useAuth();
   const { login: setDummyUser } = useApp();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('praktikan');
@@ -36,13 +42,21 @@ export default function LoginScreen() {
 
     setError(null);
     setSubmitting(true);
+
     try {
       const p = await login(email, password, role);
       setDummyUser(p.role);
-      router.replace(p.role === 'asisten' && p.approvalStatus === 'pending' ? '/pending' : '/home');
+
+      router.replace(
+        p.role === 'asisten' && p.approvalStatus === 'pending'
+          ? '/pending'
+          : '/home'
+      );
     } catch (e) {
       setError(
-        e instanceof Error && !('code' in e) ? e.message : authErrorMessage(e),
+        e instanceof Error && !('code' in e)
+          ? e.message
+          : authErrorMessage(e)
       );
     } finally {
       setSubmitting(false);
@@ -52,17 +66,24 @@ export default function LoginScreen() {
   return (
     <AuthShell
       title="Selamat Datang"
-      subtitle="Masuk untuk mencatat dan mengelola kehadiran praktikum dengan mudah."
       footer={
         <Pressable onPress={() => router.replace('/daftar')}>
           <Text style={{ color: authColors.muted, fontSize: 13 }}>
             Belum punya akun?{' '}
-            <Text style={{ color: authColors.navy, fontWeight: '800' }}>Daftar</Text>
+            <Text style={{ color: authColors.navy, fontWeight: '800' }}>
+              Daftar
+            </Text>
           </Text>
         </Pressable>
       }
     >
-      <AuthOptionGroup label="Masuk sebagai" options={roleOptions} value={role} onChange={setRole} />
+      <AuthOptionGroup
+        label="Masuk sebagai"
+        options={roleOptions}
+        value={role}
+        onChange={setRole}
+      />
+
       <AuthField
         label="Email"
         icon="mail-outline"
@@ -72,6 +93,7 @@ export default function LoginScreen() {
         autoCapitalize="none"
         keyboardType="email-address"
       />
+
       <AuthField
         label="Kata sandi"
         icon="lock-closed-outline"
@@ -80,8 +102,14 @@ export default function LoginScreen() {
         placeholder="Kata sandi"
         secureTextEntry
       />
+
       <AuthError message={error} />
-      <AuthButton title="Masuk" loading={submitting} onPress={handleSubmit} />
+
+      <AuthButton
+        title="Masuk"
+        loading={submitting}
+        onPress={handleSubmit}
+      />
     </AuthShell>
   );
 }

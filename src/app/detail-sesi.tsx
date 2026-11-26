@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, onSnapshot } from 'firebase/firestore';
 
 import { SessionEnrollment } from '@/components/session-enrollment';
+import { BackButton } from '@/components/back-button';
 import { StateView } from '@/components/state-view';
 import { useAttendance } from '@/context/attendance-context';
 import { useAuth } from '@/context/auth-context';
@@ -224,9 +225,7 @@ export default function DetailSesiScreen() {
     <KeyboardAvoidingView style={styles.screen} behavior="padding">
       <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
         <View style={styles.headerRow}>
-          <Pressable style={styles.backButton} onPress={goBack} hitSlop={8} accessibilityLabel="Kembali">
-            <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
-          </Pressable>
+        <BackButton onPress={goBack} />
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>{session.courseName}</Text>
             <View style={styles.metaRow}>
@@ -516,7 +515,6 @@ const styles = StyleSheet.create({
   inner: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 16 },
   header: { backgroundColor: '#1B2A4E', paddingBottom: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
   headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 12, maxWidth: 560, alignSelf: 'center', width: '100%' },
-  backButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', marginBottom: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   metaText: { color: '#B6C2DB', fontSize: 13, fontWeight: '500' },

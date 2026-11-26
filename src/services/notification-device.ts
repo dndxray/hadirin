@@ -22,7 +22,7 @@ export async function registerDeviceNotifications(uid: string, requestPermission
     const notifications = await sdk();
     if (Platform.OS === 'android') await notifications.setNotificationChannelAsync('praktikum', {
       name: 'Kegiatan praktikum', importance: notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 150, 250], sound: true,
+      vibrationPattern: [0, 250, 150, 250], sound: 'default',
     });
     let permission = await notifications.getPermissionsAsync();
     const allowed = () => permission.granted || permission.ios?.status === notifications.IosAuthorizationStatus.PROVISIONAL;

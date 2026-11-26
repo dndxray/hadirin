@@ -20,23 +20,23 @@ type SessionsState = {
 };
 
 export function useLabSessions(labName?: string | null) {
-  const [state, setState] = useState<SessionsState>({ sessions: [], loading: true, error: null });
+  const [state, setState] = useState<SessionsState>({ sessions: [], loading: false, error: null });
   const [revision, setRevision] = useState(0);
 
   useEffect(() => {
-    if (!labName) {
-      setState({ sessions: [], loading: false, error: null });
-      return;
-    }
+    if (!labName) return;
 
-    setState(prev => ({ ...prev, loading: true }));
+    const loadingTimer = setTimeout(() => {
+      setState(prev => ({ ...prev, loading: true }));
+    }, 0);
     
     // KUNCINYA DI SINI: Tembak ke collection 'classes', cocokin field 'room'
     const classesRef = collection(db, 'classes');
     const q = query(classesRef, where('room', '==', labName));
 
-    return onSnapshot(q, 
+    const unsubscribe = onSnapshot(q, 
       (snapshot) => {
+        clearTimeout(loadingTimer);
         try {
           const data = snapshot.docs.map(doc => ({
             id: doc.id,
@@ -49,6 +49,7 @@ export function useLabSessions(labName?: string | null) {
         }
       }, 
       (error) => {
+        clearTimeout(loadingTimer);
         setState({ 
           sessions: [], 
           loading: false,
@@ -58,7 +59,17 @@ export function useLabSessions(labName?: string | null) {
         });
       }
     );
+
+    return () => {
+      clearTimeout(loadingTimer);
+      unsubscribe();
+    };
   }, [labName, revision]);
 
-  return { ...state, retry: () => setRevision(v => v + 1) };
+  const retry = () => setRevision(v => v + 1);
+  if (!labName) {
+    return { sessions: [], loading: false, error: null, retry };
+  }
+
+  return { ...state, retry };
 }
