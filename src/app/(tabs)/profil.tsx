@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
+import { router } from 'expo-router';
 import { AuthButton, AuthError, AuthField, authColors } from '@/components/auth-ui';
 import { StateView } from '@/components/state-view';
 import { NotificationSettings } from '@/components/notification-settings';
@@ -127,6 +127,13 @@ export default function ProfilScreen() {
               >
                 <Ionicons name="create-outline" size={18} color={authColors.navy} />
                 <Text style={styles.nimEditText}>Ubah NIM</Text>
+              </Pressable>
+            ) : null}
+            {isAsisten ? (
+              <Pressable style={styles.labMenu} onPress={() => router.push('/lab-management')}>
+                <Ionicons name="location-outline" size={20} color={authColors.navy} />
+                <Text style={styles.labMenuText}>Kelola Laboratorium</Text>
+                <Ionicons name="chevron-forward" size={18} color={authColors.muted} />
               </Pressable>
             ) : null}
 
@@ -268,4 +275,17 @@ const styles = StyleSheet.create({
     backgroundColor: authColors.dangerSoft,
   },
   logoutText: { color: authColors.danger, fontSize: 16, fontWeight: '800' },
+  labMenu: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 12,
+  padding: 16,
+  marginTop: 12,
+  borderRadius: 16,
+  borderWidth: 1,
+  borderColor: authColors.border,
+  backgroundColor: authColors.white,
+},
+labMenuText: { flex: 1, fontSize: 15, fontWeight: '700', color: authColors.ink },
+
 });
