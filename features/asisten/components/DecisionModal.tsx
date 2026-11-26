@@ -8,7 +8,6 @@ import {
   View,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 
 import { theme } from '../theme';

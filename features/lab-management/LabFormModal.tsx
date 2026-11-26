@@ -69,14 +69,17 @@ export function LabFormModal({ visible, lab, onClose, onSubmit }: Props) {
   // Isi ulang form setiap kali dibuka.
   useEffect(() => {
     if (!visible) return;
-    setValues(valuesFrom(lab));
-    setErrors({});
-    setSubmitError(null);
-    setSaving(false);
-    setLocating(false);
-    setLocationError(null);
-    setLocationNote(null);
     openCount.current += 1;
+    const id = setTimeout(() => {
+      setValues(valuesFrom(lab));
+      setErrors({});
+      setSubmitError(null);
+      setSaving(false);
+      setLocating(false);
+      setLocationError(null);
+      setLocationNote(null);
+    }, 0);
+    return () => clearTimeout(id);
   }, [visible, lab]);
 
   const editing = !!lab;

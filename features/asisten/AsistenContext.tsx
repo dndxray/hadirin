@@ -1,23 +1,25 @@
-import React, {
+import {
   createContext,
-  useContext,
-  useReducer,
-  useMemo,
-  useEffect,
-  useState,
   ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
 } from 'react';
-import { Assistant, Session, Attendance, isSessionOpen, isSessionUpcoming } from './types';
 import { useAuth } from '../../src/context/auth-context';
+import { notifyUsers } from '../../src/services/notification-service';
+import { Assistant, Attendance, isSessionOpen, isSessionUpcoming, Session } from './types';
+
 import {
   createSession as createSessionService,
-  updateSession as updateSessionService,
   deleteSession as deleteSessionService,
+  processPendingPermissionAi,
+  SessionInput,
   setSessionStatus,
   subscribeAssistantSessions,
-  processPendingPermissionAi,
   subscribePendingPermissionAiAutoProcessor,
-  SessionInput,
+  updateSession as updateSessionService,
 } from '../../src/services/assistant-service';
 
 type Action =
@@ -116,6 +118,12 @@ interface AsistenContextValue {
 
 const AsistenContext = createContext<AsistenContextValue | undefined>(undefined);
 
+// Field yang dianggap "jadwal berubah" dan perlu diberitahukan ke praktikan.
+// `date` (objek Date) sengaja tidak dibandingkan langsung karena selalu
+// berbeda dari string tanggal di state; perubahan tanggal sudah tercermin di
+// `dateLabel`. `labId` ikut karena lokasi presensi berpindah.
+const SCHEDULE_FIELDS = ['dateLabel', 'startTime', 'endTime', 'timeRange', 'room', 'labId', 'radiusM'] as const;
+
 export function AsistenProvider({ children }: { children: ReactNode }) {
   const { profile, loading: authLoading } = useAuth();
   const isAsisten = profile?.role === 'asisten';
@@ -193,6 +201,8 @@ export function AsistenProvider({ children }: { children: ReactNode }) {
       dateLabel: input.dateLabel,
       timeRange: input.timeRange,
       room: input.room,
+      labId: input.labId,
+      radiusM: input.labId ? (input.radiusM ?? 50) : undefined,
       assistantId: assistant.id,
       assistantName: assistant.name,
       status: 'upcoming',
@@ -208,9 +218,22 @@ export function AsistenProvider({ children }: { children: ReactNode }) {
     sessionId: string,
     input: Partial<SessionInput>
   ): Promise<void> => {
+    const before = state.sessions.find((s) => s.id === sessionId);
     await updateSessionService(sessionId, input);
     dispatch({ type: 'UPDATE_SESSION', id: sessionId, input });
     setError(null);
+
+    const scheduleChanged = SCHEDULE_FIELDS.some(
+      (k) => k in input && (input as any)[k] !== (before as any)?.[k]
+    );
+    if (scheduleChanged && before?.participantIds?.length) {
+      void notifyUsers(before.participantIds, {
+        type: 'jadwal_berubah',
+        title: 'Jadwal berubah',
+        body: `Jadwal ${before.courseName} (${before.className ?? before.kelas}) diperbarui.`,
+        sessionId,
+      }).catch(() => {});
+    }
   };
 
   const deleteSession = async (sessionId: string): Promise<void> => {
@@ -220,9 +243,19 @@ export function AsistenProvider({ children }: { children: ReactNode }) {
   };
 
   const openSession = async (id: string): Promise<void> => {
+    const target = state.sessions.find((s) => s.id === id);
     await setSessionStatus(id, 'open');
     dispatch({ type: 'OPEN_SESSION', id });
     setError(null);
+
+    if (target?.participantIds?.length) {
+      void notifyUsers(target.participantIds, {
+        type: 'sesi_dibuka',
+        title: 'Sesi dibuka',
+        body: `Presensi ${target.courseName} (${target.className ?? target.kelas}) sudah bisa dilakukan.`,
+        sessionId: id,
+      }).catch(() => {});
+    }
   };
 
   const closeSession = async (id: string): Promise<void> => {

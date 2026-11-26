@@ -1,8 +1,12 @@
 import {
+  MuseoModerno_700Bold,
+  useFonts,
+} from '@expo-google-fonts/museomoderno';
+import {
   DarkTheme,
   DefaultTheme,
-  ThemeProvider,
   Stack,
+  ThemeProvider,
 } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useSyncExternalStore } from 'react';
@@ -10,6 +14,7 @@ import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-nativ
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { authColors } from '@/components/auth-ui';
+import { NotificationListener } from '@/components/notification-listener';
 import { AppProvider } from '@/context/app-context';
 import { AttendanceProvider } from '@/context/attendance-context';
 import { AuthProvider, useAuth } from '@/context/auth-context';
@@ -24,6 +29,7 @@ function RootNavigator() {
 
   return (
     <>
+    <NotificationListener />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
 
@@ -62,8 +68,9 @@ function RootNavigator() {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const mounted = useSyncExternalStore(subscribeHydration, () => true, () => false);
+  const [fontsLoaded, fontError] = useFonts({ MuseoModerno_700Bold });
 
-  if (!mounted) {
+  if (!mounted || (!fontsLoaded && !fontError)) {
     return null;
   }
 

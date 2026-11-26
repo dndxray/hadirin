@@ -3,6 +3,7 @@ import type { PracticeSession } from './attendance';
 export type CloudSession = PracticeSession & {
   participantIds: string[];
   labId?: string;
+  radiusM?: number;
   attendanceRadiusMeters?: number;
   qrToken?: string;
 };

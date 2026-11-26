@@ -2,12 +2,12 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
 
+import { AuthShell } from '@/components/auth-layout';
 import {
   AuthButton,
   AuthError,
   AuthField,
   AuthOptionGroup,
-  AuthShell,
   authColors,
 } from '@/components/auth-ui';
 import { useApp } from '@/context/app-context';
@@ -51,7 +51,6 @@ export default function LoginScreen() {
 
   return (
     <AuthShell
-      eyebrow="MULAI SEKARANG"
       title="Selamat Datang"
       subtitle="Masuk untuk mencatat dan mengelola kehadiran praktikum dengan mudah."
       footer={
@@ -63,6 +62,7 @@ export default function LoginScreen() {
         </Pressable>
       }
     >
+      <AuthOptionGroup label="Masuk sebagai" options={roleOptions} value={role} onChange={setRole} />
       <AuthField
         label="Email"
         icon="mail-outline"
@@ -72,7 +72,6 @@ export default function LoginScreen() {
         autoCapitalize="none"
         keyboardType="email-address"
       />
-      <AuthOptionGroup label="Masuk sebagai" options={roleOptions} value={role} onChange={setRole} />
       <AuthField
         label="Kata sandi"
         icon="lock-closed-outline"

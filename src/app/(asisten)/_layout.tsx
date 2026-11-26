@@ -1,9 +1,7 @@
-import React from 'react';
 import { Redirect, Stack } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/context/auth-context';
-
 export default function AsistenLayout() {
   const { profile, loading } = useAuth();
 

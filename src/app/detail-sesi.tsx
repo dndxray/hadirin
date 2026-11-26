@@ -30,6 +30,8 @@ import { firebaseErrorMessage } from '@/utils/firebase-error';
 import { initials } from '@/utils/home-format';
 import { getSessionStatus, isSessionFinished } from '@/utils/session-status';
 import { SessionFormModal } from '../../features/asisten/components/SessionFormModal';
+import { SessionQRModal } from '../../features/asisten/components/SessionQRModal';
+import { notifyUsers } from '@/services/notification-service';
 import type { Attendance } from '../../features/asisten/types';
 
 function timePart(range?: string, index = 0) {
@@ -54,6 +56,7 @@ export default function DetailSesiScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showQR, setShowQR] = useState(false);
 
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
@@ -187,7 +190,16 @@ export default function DetailSesiScreen() {
     setBusy(true);
     setError(null);
     try {
-      await setSessionStatus(session.id, status === 'open' ? 'closed' : 'open');
+      const nextStatus = status === 'open' ? 'closed' : 'open';
+      await setSessionStatus(session.id, nextStatus);
+      if (nextStatus === 'open' && session.participantIds?.length) {
+        void notifyUsers(session.participantIds, {
+          type: 'sesi_dibuka',
+          title: 'Sesi dibuka',
+          body: `Presensi ${session.courseName} (${session.className}) sudah bisa dilakukan.`,
+          sessionId: session.id,
+        }).catch(() => {});
+      }
     } catch (failure: any) {
       setError(firebaseErrorMessage(failure));
     } finally {
@@ -271,6 +283,15 @@ export default function DetailSesiScreen() {
 
             {isAsisten ? (
               <View style={{ width: '100%', gap: 12 }}>
+                {status === 'open' ? (
+                  <Pressable
+                    onPress={() => setShowQR(true)}
+                    style={({ pressed }) => [styles.actionBtnOutline, pressed && { opacity: 0.7 }]}
+                  >
+                    <Ionicons name="qr-code-outline" size={18} color="#1B2A4E" />
+                    <Text style={styles.actionBtnTextOutline}>Tampilkan QR Code</Text>
+                  </Pressable>
+                ) : null}
                 <Pressable
                   onPress={() => setShowConfirm(true)}
                   disabled={busy || finished}
@@ -391,6 +412,14 @@ export default function DetailSesiScreen() {
       </ScrollView>
 
 
+      <SessionQRModal
+        visible={showQR}
+        sessionId={session.id}
+        courseName={session.courseName}
+        className={session.className}
+        onClose={() => setShowQR(false)}
+      />
+
       <Modal visible={showConfirm} transparent animationType="fade" onRequestClose={() => setShowConfirm(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -454,10 +483,24 @@ export default function DetailSesiScreen() {
           endTime: session.endTime || timePart(session.timeRange, 1),
           dateTimestamp: session.dateTimestamp,
           participantIds,
+          labId: session.labId,
+          radiusM: session.radiusM,
         }}
         onClose={() => setShowEditModal(false)}
         onSubmit={async (data) => {
           await updateSession(session.id, data);
+          const scheduleFields = ['dateLabel', 'startTime', 'endTime', 'timeRange', 'room', 'labId', 'radiusM'] as const;
+          const scheduleChanged = scheduleFields.some((field) =>
+            field in data && (data as any)[field] !== (session as any)[field],
+          );
+          if (scheduleChanged && session.participantIds?.length) {
+            void notifyUsers(session.participantIds, {
+              type: 'jadwal_berubah',
+              title: 'Jadwal berubah',
+              body: `Jadwal ${session.courseName} (${session.className}) diperbarui.`,
+              sessionId: session.id,
+            }).catch(() => {});
+          }
           if (data.classId) await syncClassSessions(data.classId);
           setShowEditModal(false);
         }}

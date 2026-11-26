@@ -38,13 +38,27 @@
       "expo-status-bar",
       "expo-web-browser",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Izinkan aplikasi menggunakan kamera untuk memindai QR presensi.",
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Izinkan aplikasi menggunakan lokasi untuk memvalidasi presensi di laboratorium."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

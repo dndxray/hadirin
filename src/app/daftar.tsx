@@ -2,12 +2,12 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
 
+import { AuthShell } from '@/components/auth-layout';
 import {
   AuthButton,
   AuthError,
   AuthField,
   AuthOptionGroup,
-  AuthShell,
   authColors,
 } from '@/components/auth-ui';
 import { authErrorMessage, useAuth } from '@/context/auth-context';
@@ -61,7 +61,6 @@ export default function DaftarScreen() {
 
   return (
     <AuthShell
-      eyebrow="AKUN BARU"
       title="Buat Akun"
       subtitle="Daftar untuk mulai mencatat dan mengelola kehadiran praktikum."
       footer={

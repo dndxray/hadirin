@@ -1,34 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import { SessionEnrollment } from '@/components/session-enrollment';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
-  Pressable,
-  KeyboardAvoidingView,
-  ActivityIndicator,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SessionEnrollment } from '@/components/session-enrollment';
 import { useAsisten } from '../../../../features/asisten/AsistenContext';
-import { SessionStatusBadge } from '../../../../features/asisten/components/SessionStatusBadge';
-import { ConfirmModal } from '../../../../features/asisten/components/ConfirmModal';
-import { SessionFormModal } from '../../../../features/asisten/components/SessionFormModal';
 import { AttendanceRow } from '../../../../features/asisten/components/AttendanceRow';
+import { ConfirmModal } from '../../../../features/asisten/components/ConfirmModal';
 import { EmptyState } from '../../../../features/asisten/components/EmptyState';
+import { SessionFormModal } from '../../../../features/asisten/components/SessionFormModal';
+import { SessionQRModal } from '../../../../features/asisten/components/SessionQRModal';
+import { SessionStatusBadge } from '../../../../features/asisten/components/SessionStatusBadge';
 import { theme } from '../../../../features/asisten/theme';
-import { formatDate } from '../../../../features/asisten/utils/format';
 import {
   Attendance,
   isSessionClosed,
   isSessionOpen,
   isSessionUpcoming,
 } from '../../../../features/asisten/types';
+import { formatDate } from '../../../../features/asisten/utils/format';
 import {
-  subscribeSessionAttendances,
   SessionInput,
+  subscribeSessionAttendances,
 } from '../../../../src/services/assistant-service';
 
 export default function SessionDetailScreen() {
@@ -53,12 +54,12 @@ export default function SessionDetailScreen() {
   const [showConfirmClose, setShowConfirmClose] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showQR, setShowQR] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
-  // Subscribe to real-time attendance from Firestore with fallback to initial
   useEffect(() => {
     if (!session?.id) return;
 
@@ -114,6 +115,7 @@ export default function SessionDetailScreen() {
     try {
       await closeSession(session.id);
       setShowConfirmClose(false);
+      setShowQR(false);
     } catch (err: any) {
       setActionError(err.message || 'Gagal menutup sesi');
       setShowConfirmClose(false);
@@ -237,7 +239,6 @@ export default function SessionDetailScreen() {
           ) : null}
         </View>
 
-        {/* Edit & Delete Action Buttons (SRS-13) */}
         <View style={styles.manageRow}>
           <Pressable
             style={styles.manageButton}
@@ -284,22 +285,35 @@ export default function SessionDetailScreen() {
         )}
 
         {isSessionOpen(session.status) && (
-          <Pressable
-            disabled={busy}
-            style={[
-              styles.button,
-              styles.actionButton,
-              { backgroundColor: theme.colors.red },
-              busy && { opacity: 0.6 },
-            ]}
-            onPress={() => setShowConfirmClose(true)}
-          >
-            {busy ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.buttonText}>Tutup Sesi</Text>
-            )}
-          </Pressable>
+          <>
+            <Pressable
+              style={[
+                styles.button,
+                styles.actionButton,
+                { backgroundColor: theme.colors.primary, marginBottom: theme.spacing.sm },
+              ]}
+              onPress={() => setShowQR(true)}
+            >
+              <Text style={styles.buttonText}>Tampilkan QR Code</Text>
+            </Pressable>
+
+            <Pressable
+              disabled={busy}
+              style={[
+                styles.button,
+                styles.actionButton,
+                { backgroundColor: theme.colors.red },
+                busy && { opacity: 0.6 },
+              ]}
+              onPress={() => setShowConfirmClose(true)}
+            >
+              {busy ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Tutup Sesi</Text>
+              )}
+            </Pressable>
+          </>
         )}
 
         {isSessionClosed(session.status) && (
@@ -417,14 +431,25 @@ export default function SessionDetailScreen() {
           courseName: session.courseName,
           courseCode: session.courseCode,
           className: displayKelas,
+          classId: (session as any).classId,
           dateLabel: displayDate,
           timeRange: displayTime,
           room: session.room,
+          labId: session.labId,
+          radiusM: session.radiusM,
           description: session.description,
           participantIds: session.participantIds,
         }}
         onClose={() => setShowEditModal(false)}
         onSubmit={handleUpdateSession}
+      />
+
+      <SessionQRModal
+        visible={showQR}
+        sessionId={session.id}
+        courseName={session.courseName}
+        className={displayKelas}
+        onClose={() => setShowQR(false)}
       />
     </KeyboardAvoidingView>
   );
