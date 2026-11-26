@@ -14,7 +14,6 @@ import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-nativ
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { authColors } from '@/components/auth-ui';
-import { NotificationListener } from '@/components/notification-listener';
 import { AppProvider } from '@/context/app-context';
 import { AttendanceProvider } from '@/context/attendance-context';
 import { AuthProvider, useAuth } from '@/context/auth-context';
@@ -22,6 +21,7 @@ import { NotificationProvider } from '@/context/notification-context';
 import { AsistenProvider } from '../../features/asisten/AsistenContext';
 
 SplashScreen.preventAutoHideAsync();
+
 const subscribeHydration = () => () => {};
 
 function RootNavigator() {
@@ -29,24 +29,21 @@ function RootNavigator() {
 
   return (
     <>
-    <NotificationListener />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
-
         <Stack.Protected guard={!profile && !loading}>
           <Stack.Screen name="login" />
           <Stack.Screen name="daftar" />
         </Stack.Protected>
-
         <Stack.Protected guard={!!profile || loading}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="(asisten)" />
           <Stack.Screen name="detail-sesi" />
           <Stack.Screen name="izin" />
+          <Stack.Screen name="jadwal" />
           <Stack.Screen name="lab-management" />
         </Stack.Protected>
       </Stack>
-
       {loading ? (
         <View
           style={[

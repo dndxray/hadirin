@@ -17,6 +17,7 @@ import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { Redirect } from 'expo-router';
 
 import { AuthError, authColors } from '@/components/auth-ui';
+import { BackButton } from '@/components/back-button';
 import { BottomTabInset } from '@/constants/theme';
 import { useApp } from '@/context/app-context';
 import { db } from '@/lib/firebase';
@@ -390,7 +391,10 @@ export default function KelasScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + BottomTabInset + 40 }} showsVerticalScrollIndicator={false}>
         <View style={[styles.header, { paddingTop: insets.top + 28 }]}>
           <View style={styles.headerInner}>
-            <Text style={styles.headerEyebrow}>HADIRIN</Text>
+            <View style={styles.headerTopRow}>
+              <BackButton />
+              <Text style={styles.headerEyebrow}>HADIRIN</Text>
+            </View>
             <Text style={styles.headerTitle}>Kelola Kelas</Text>
             <Text style={styles.headerSubtitle}>Tambah, ubah, dan hapus kelas praktikum.</Text>
 
@@ -575,6 +579,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: authColors.background },
   header: { backgroundColor: authColors.navy, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, paddingHorizontal: 24, paddingBottom: 56, alignItems: 'center' },
   headerInner: { width: '100%', maxWidth: 800, gap: 6 },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   headerEyebrow: { color: '#5EEAD4', fontSize: 11, fontWeight: '800', letterSpacing: 1.6 },
   headerTitle: { color: authColors.white, fontSize: 28, fontWeight: '800' },
   headerSubtitle: { color: '#B6C2DB', fontSize: 14 },
