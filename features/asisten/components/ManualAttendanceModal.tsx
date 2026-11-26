@@ -49,8 +49,8 @@ export function ManualAttendanceModal({
     if (!visible) return;
     const ids = participantIds ?? [];
     if (ids.length === 0) {
-      setParticipants([]);
-      return;
+      const id = setTimeout(() => setParticipants([]), 0);
+      return () => clearTimeout(id);
     }
 
     let cancelled = false;
@@ -89,10 +89,12 @@ export function ManualAttendanceModal({
 
   // Reset pencarian setiap modal dibuka
   useEffect(() => {
-    if (visible) {
+    if (!visible) return;
+    const id = setTimeout(() => {
       setSearch('');
       setDoneIds([]);
-    }
+    }, 0);
+    return () => clearTimeout(id);
   }, [visible]);
 
   const list = useMemo(() => {

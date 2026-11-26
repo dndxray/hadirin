@@ -1,7 +1,6 @@
 import { doc, GeoPoint, runTransaction, serverTimestamp, Timestamp } from 'firebase/firestore';
 
 import { auth, db } from '@/lib/firebase';
-import { isWithinLab } from '@/lib/geo';
 import type { CloudSession, SessionSummary } from '@/types/practitioner';
 import type { CheckInEvidence } from '@/types/sprint-three';
 import { isDocumentId, readLab, validateCheckIn } from '@/utils/attendance-location';

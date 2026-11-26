@@ -145,7 +145,10 @@ export function LabMap() {
 
   // Cek lokasi saat halaman dibuka.
   useEffect(() => {
-    locate();
+    const id = setTimeout(() => {
+      void locate();
+    }, 0);
+    return () => clearTimeout(id);
   }, [locate]);
 
   // Kalau pengguna kembali dari pengaturan HP dan masih ada masalah,

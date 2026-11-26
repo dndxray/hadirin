@@ -14,7 +14,6 @@ export function useLabs() {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    setStatus('loading');
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const clearTimer = () => {
@@ -51,7 +50,10 @@ export function useLabs() {
   }, [attempt]);
 
   // Coba muat ulang setelah gagal.
-  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  const retry = useCallback(() => {
+    setStatus('loading');
+    setAttempt((n) => n + 1);
+  }, []);
 
   return { labs, status, retry };
 }
