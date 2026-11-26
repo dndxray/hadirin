@@ -6,10 +6,30 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDaqKo3pG6zxPcABUlL_PNsl1kB3U68-hQ",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "hadirin-f6a98.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "hadirin-f6a98",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "hadirin-f6a98.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "111689895720",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:111689895720:web:aa5b563f3477ff6ac98a1d"
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "environment": "preview",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDaqKo3pG6zxPcABUlL_PNsl1kB3U68-hQ",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "hadirin-f6a98.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "hadirin-f6a98",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "hadirin-f6a98.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "111689895720",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:111689895720:web:aa5b563f3477ff6ac98a1d"
+      }
     },
     "production": {
       "autoIncrement": true
