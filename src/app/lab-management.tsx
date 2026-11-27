@@ -2,10 +2,10 @@ import { Redirect } from 'expo-router';
 
 import { useAuth } from '@/context/auth-context';
 import { hasRole } from '@/utils/roles';
-import { LabListScreen } from '../../features/lab-management/LabListScreen';
 
-// Halaman kelola laboratorium. Hanya untuk asisten; aturan Firestore tetap
-// menjadi penjaga yang sebenarnya.
+// Pengelolaan laboratorium sekarang berada di halaman Maps (di bawah peta,
+// khusus asisten). Route ini dipertahankan hanya supaya tautan lama tetap
+// bekerja: semua pengunjung diarahkan ke /maps.
 export default function LabManagementRoute() {
   const { profile, loading } = useAuth();
 
@@ -13,5 +13,5 @@ export default function LabManagementRoute() {
   if (!profile) return <Redirect href="/login" />;
   if (!hasRole(profile, 'asisten')) return <Redirect href="/home" />;
 
-  return <LabListScreen />;
+  return <Redirect href="/maps" />;
 }

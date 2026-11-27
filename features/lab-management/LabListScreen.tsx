@@ -1,8 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { useState, type ComponentProps } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { authColors } from '@/components/auth-ui';
 import type { Lab } from '@/types/sprint-three';
@@ -16,14 +14,14 @@ import { useLabs } from './use-labs';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
-function goBack() {
-  if (router.canGoBack()) router.back();
-  else router.replace('/home');
-}
-
-// Halaman daftar laboratorium untuk asisten (SRS-22: lihat data lab).
-export function LabListScreen() {
-  const insets = useSafeAreaInsets();
+/**
+ * Pengelolaan laboratorium untuk asisten (SRS-22: lihat, tambah, ubah, hapus).
+ * Ditanam di halaman Maps, di bawah peta. Tidak punya header atau tombol
+ * kembali sendiri karena sudah berada di dalam halaman Maps.
+ *
+ * `bottomInset`: ruang kosong di bawah daftar agar tidak tertutup tab bar.
+ */
+export function LabManager({ bottomInset = 24 }: { bottomInset?: number }) {
   const { labs, status, errorMessage, retry } = useLabs();
   const [formOpen, setFormOpen] = useState(false);
   // Lab yang sedang diubah; kosong berarti form dipakai untuk menambah lab baru.
@@ -93,31 +91,31 @@ export function LabListScreen() {
   }
 
   return (
-    <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
-        <View style={styles.topRow}>
-          <Pressable onPress={goBack} hitSlop={12} accessibilityLabel="Kembali">
-            <Ionicons name="arrow-back" size={22} color={authColors.white} />
-          </Pressable>
-          <Pressable
-            onPress={openCreate}
-            style={styles.addButton}
-            accessibilityLabel="Tambah laboratorium">
-            <Ionicons name="add" size={18} color={authColors.navy} />
-            <Text style={styles.addButtonText}>Tambah</Text>
-          </Pressable>
+    <View style={styles.root}>
+      <View style={styles.sectionHead}>
+        <View style={styles.sectionText}>
+          <Text accessibilityRole="header" style={styles.sectionTitle}>
+            Kelola Laboratorium
+          </Text>
+          <Text style={styles.sectionSub}>
+            {status === 'ready' || labs.length > 0
+              ? `${labs.length} laboratorium terdaftar.`
+              : 'Daftar laboratorium untuk presensi dan peta.'}
+          </Text>
         </View>
-        <Text style={styles.eyebrow}>HADIRIN</Text>
-        <Text style={styles.title}>Kelola Laboratorium</Text>
-        <Text style={styles.subtitle}>
-          {status === 'ready' || labs.length > 0
-            ? `${labs.length} laboratorium terdaftar.`
-            : 'Daftar laboratorium untuk presensi dan peta.'}
-        </Text>
+        <Pressable
+          onPress={openCreate}
+          style={({ pressed }) => [styles.addButton, pressed && { opacity: 0.8 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Tambah laboratorium">
+          <Ionicons name="add" size={18} color={authColors.white} />
+          <Text style={styles.addButtonText}>Tambah</Text>
+        </Pressable>
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
+        contentContainerStyle={[styles.content, { paddingBottom: bottomInset }]}
+        showsVerticalScrollIndicator={false}>
         {status === 'loading' ? (
           <View style={styles.loading}>
             <ActivityIndicator color={authColors.navy} />
@@ -275,32 +273,33 @@ function Notice({ icon, title, text, tone, actionLabel, onAction }: NoticeProps)
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: authColors.background },
-  header: {
-    backgroundColor: authColors.navy,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  topRow: {
+  root: { flex: 1 },
+
+  // Judul bagian + tombol tambah
+  sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 10,
   },
+  sectionText: { flex: 1 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: authColors.ink },
+  sectionSub: { fontSize: 13, color: authColors.muted, marginTop: 2 },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 999,
-    backgroundColor: authColors.white,
+    backgroundColor: authColors.navy,
   },
-  addButtonText: { fontSize: 13, fontWeight: '800', color: authColors.navy },
-  eyebrow: { color: '#B6C2DB', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
-  title: { color: authColors.white, fontSize: 24, fontWeight: '800', marginTop: 4 },
-  subtitle: { color: '#BBC7DC', fontSize: 14, lineHeight: 22, marginTop: 4 },
-  content: { padding: 16, gap: 12 },
+  addButtonText: { fontSize: 13, fontWeight: '800', color: authColors.white },
+
+  content: { paddingHorizontal: 16, paddingTop: 2, gap: 12 },
   loading: { alignItems: 'center', gap: 10, paddingVertical: 40 },
   loadingText: { fontSize: 14, color: authColors.muted },
   card: {
