@@ -42,7 +42,9 @@ function QuickAction({
       style={({ pressed }) => [styles.quickItem, pressed && { opacity: 0.7 }]}
     >
       <QuickIllustration kind={kind} />
-      <Text style={styles.quickLabel}>{label}</Text>
+      <Text style={styles.quickLabel} numberOfLines={2}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -176,12 +178,21 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Menu cepat */}
+        {/* Menu cepat: baris 1 = 4 ikon, baris 2 = Riwayat Izin tepat di bawah Jadwal */}
         <View style={styles.quickCard}>
           <QuickAction kind="jadwal" label="Jadwal" onPress={() => router.push('/jadwal')} />
           <QuickAction kind="presensi" label="Presensi" onPress={() => router.push('/presensi')} />
-          <QuickAction kind="riwayat" label="Riwayat" onPress={() => router.push('/explore')} />
+          <QuickAction
+            kind="riwayat"
+            label="Riwayat"
+            onPress={() => router.push('/explore')}
+          />
           <QuickAction kind="maps" label="Maps" onPress={() => router.push('/maps')} />
+          <QuickAction
+            kind="izin"
+            label="Izin"
+            onPress={() => router.push('/riwayat-izin' as any)}
+          />
         </View>
 
         {/* Jadwal hari ini */}
@@ -289,10 +300,11 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, marginLeft: 12, fontSize: 15, color: authColors.navy },
 
-  // Menu cepat
+  // Menu cepat (grid 4 kolom, item ke-5 turun ke baris kedua di bawah Jadwal)
   quickCard: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexWrap: 'wrap',
+    rowGap: 16,
     backgroundColor: '#FFFFFF',
     marginHorizontal: 24,
     marginTop: 16,
@@ -305,8 +317,13 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
-  quickItem: { alignItems: 'center', gap: 8, minWidth: 64 },
-  quickLabel: { fontSize: 12, fontWeight: '600', color: authColors.ink },
+  quickItem: { width: '25%', alignItems: 'center', gap: 8 },
+  quickLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: authColors.ink,
+    textAlign: 'center',
+  },
 
   // Jadwal
   schedule: { paddingHorizontal: 24, paddingTop: 24 },

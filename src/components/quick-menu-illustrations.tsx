@@ -38,8 +38,8 @@ function JadwalArt() {
       <View style={jadwal.body}>
         <View style={jadwal.band} />
         <View style={jadwal.grid}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <View key={i} style={[jadwal.cell, i === 4 && { backgroundColor: '#EF4444' }]} />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <View key={i} style={[jadwal.cell, i === 3 && { backgroundColor: '#EF4444' }]} />
           ))}
         </View>
       </View>
