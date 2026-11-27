@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -178,16 +177,6 @@ export default function ProfilScreen() {
             ) : null}
 
             <View style={styles.card}>
-              {isAsisten ? (
-                <>
-                  <MenuRow
-                    icon="location-outline"
-                    label="Kelola Laboratorium"
-                    onPress={() => router.push('/lab-management')}
-                  />
-                  <View style={styles.divider} />
-                </>
-              ) : null}
               <MenuRow
                 icon="notifications-outline"
                 label="Notifikasi"

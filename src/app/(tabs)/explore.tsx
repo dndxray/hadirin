@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { authColors } from '@/components/auth-ui';
 import { BackButton } from '@/components/back-button';
-import { HistoryDataState, PermissionHistory } from '@/components/permission-history';
+import { HistoryDataState } from '@/components/permission-history';
 import { StateView } from '@/components/state-view';
 import { BottomTabInset } from '@/constants/theme';
 import { useAttendance } from '@/context/attendance-context';
@@ -21,7 +21,6 @@ const MONTHS = [
 
 type HistoryItem = { record: CloudAttendance; session: SessionSummary };
 type Group = { label: string; items: HistoryItem[] };
-type Tab = 'presensi' | 'izin';
 
 function monthLabel(ts: number) {
   const d = new Date(ts);
@@ -37,7 +36,6 @@ export default function AttendanceHistoryScreen() {
   const insets = useSafeAreaInsets();
   const { profile, loading: authLoading } = useAuth();
   const { records, sessions, attendanceState, sessionState, retry } = useAttendance();
-  const [tab, setTab] = useState<Tab>('presensi');
   const [showFilter, setShowFilter] = useState(false);
   const [course, setCourse] = useState<string | null>(null);
 
@@ -94,7 +92,7 @@ export default function AttendanceHistoryScreen() {
           <View style={styles.inner}>
             <View style={styles.headerRow}>
               <BackButton />
-              <Text accessibilityRole="header" style={styles.title}>Riwayat</Text>
+              <Text accessibilityRole="header" style={styles.title}>Riwayat Presensi</Text>
               <View style={styles.backPlaceholder} />
             </View>
           </View>
@@ -102,128 +100,114 @@ export default function AttendanceHistoryScreen() {
 
         <View style={styles.body}>
           <View style={styles.inner}>
-            <View style={styles.segment}>
-              {(['presensi', 'izin'] as Tab[]).map((t) => {
-                const active = tab === t;
-                return (
-                  <Pressable
-                    key={t}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: active }}
-                    onPress={() => setTab(t)}
-                    style={[styles.segmentItem, active && styles.segmentActive]}
-                  >
-                    <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-                      {t === 'presensi' ? 'Presensi' : 'Izin'}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            {/* Kotak biru ringkasan */}
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryCol}>
+                  <Text style={styles.summaryValue}>{summaryReady ? `${percent}%` : '—'}</Text>
+                  <Text style={styles.summaryLabel}>Tingkat Kehadiran</Text>
+                </View>
+                <View style={styles.summaryCol}>
+                  <Text style={styles.summaryValue}>{history.length}</Text>
+                  <Text style={styles.summaryLabel}>Total Hadir</Text>
+                </View>
+              </View>
+              <View style={styles.progressTrack}>
+                <View
+                  style={[styles.progressFill, { width: `${summaryReady ? percent : 0}%` }]}
+                />
+              </View>
             </View>
 
-            {tab === 'izin' ? (
+            <HistoryDataState {...attendanceState} retry={retry} />
+            {sessionState.error ? (
+              <Text style={styles.notice}>
+                Persentase belum tersedia karena data sesi belum dapat dimuat.
+              </Text>
+            ) : null}
+
+            {!attendanceState.loading && !attendanceState.error && history.length === 0 ? (
               <View style={{ marginTop: 16 }}>
-                <PermissionHistory />
+                <StateView
+                  kind="empty"
+                  title="Belum ada presensi"
+                  message="Saat presensi berhasil, sesi yang kamu hadiri akan muncul di sini."
+                  actionLabel="Lihat Sesi"
+                  onAction={() => router.push('/home')}
+                />
               </View>
             ) : (
               <>
-                <Text style={styles.summaryLine}>
-                  {summaryReady
-                    ? `${history.length} kali hadir · kehadiran ${percent}%`
-                    : 'Menghitung kehadiran…'}
-                </Text>
-
-                <HistoryDataState {...attendanceState} retry={retry} />
-                {sessionState.error ? (
-                  <Text style={styles.notice}>
-                    Persentase belum tersedia karena data sesi belum dapat dimuat.
-                  </Text>
+                {showFilter ? (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterChips}
+                  >
+                    {[null, ...courses].map((c) => {
+                      const active = selectedCourse === c;
+                      return (
+                        <Pressable
+                          key={c ?? 'semua'}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                          onPress={() => setCourse(c)}
+                          style={[styles.chip, active && styles.chipActive]}
+                        >
+                          <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                            {c ?? 'Semua'}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
                 ) : null}
 
-                {!attendanceState.loading && !attendanceState.error && history.length === 0 ? (
-                  <View style={{ marginTop: 16 }}>
-                    <StateView
-                      kind="empty"
-                      title="Belum ada presensi"
-                      message="Saat presensi berhasil, sesi yang kamu hadiri akan muncul di sini."
-                      actionLabel="Lihat Sesi"
-                      onAction={() => router.push('/home')}
-                    />
-                  </View>
-                ) : (
-                  <>
-                    {showFilter ? (
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.filterChips}
-                      >
-                        {[null, ...courses].map((c) => {
-                          const active = selectedCourse === c;
-                          return (
-                            <Pressable
-                              key={c ?? 'semua'}
-                              accessibilityRole="button"
-                              accessibilityState={{ selected: active }}
-                              onPress={() => setCourse(c)}
-                              style={[styles.chip, active && styles.chipActive]}
-                            >
-                              <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                                {c ?? 'Semua'}
+                {groups.map((g, gi) => (
+                  <View key={g.label}>
+                    <View style={styles.groupRow}>
+                      <Text style={styles.groupTitle}>{g.label}</Text>
+                      {gi === 0 ? (
+                        <Pressable
+                          style={styles.filterPill}
+                          accessibilityRole="button"
+                          accessibilityLabel="Filter"
+                          accessibilityState={{ expanded: showFilter }}
+                          onPress={() => setShowFilter((v) => !v)}
+                        >
+                          <Ionicons name="funnel-outline" size={12} color={authColors.navy} />
+                          <Text style={styles.filterText}>Filter</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.timeline}>
+                      {g.items.map(({ record, session }) => (
+                        <View key={record.id} style={styles.item}>
+                          <View style={styles.dot}>
+                            <View style={styles.dotInner} />
+                          </View>
+                          <View style={styles.card}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.cardTitle} numberOfLines={2}>
+                                {session.courseName}
                               </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </ScrollView>
-                    ) : null}
-
-                    {groups.map((g, gi) => (
-                      <View key={g.label}>
-                        <View style={styles.groupRow}>
-                          <Text style={styles.groupTitle}>{g.label}</Text>
-                          {gi === 0 ? (
-                            <Pressable
-                              style={styles.filterPill}
-                              accessibilityRole="button"
-                              accessibilityLabel="Filter"
-                              accessibilityState={{ expanded: showFilter }}
-                              onPress={() => setShowFilter((v) => !v)}
-                            >
-                              <Ionicons name="funnel-outline" size={12} color={authColors.navy} />
-                              <Text style={styles.filterText}>Filter</Text>
-                            </Pressable>
-                          ) : null}
-                        </View>
-
-                        <View style={styles.timeline}>
-                          {g.items.map(({ record, session }) => (
-                            <View key={record.id} style={styles.item}>
-                              <View style={styles.dot}>
-                                <View style={styles.dotInner} />
-                              </View>
-                              <View style={styles.card}>
-                                <View style={{ flex: 1 }}>
-                                  <Text style={styles.cardTitle} numberOfLines={2}>
-                                    {session.courseName}
-                                  </Text>
-                                  <Text style={styles.cardDate}>
-                                    {record.checkedInAt
-                                      ? `${dateLabel(record.checkedInAt)} · ${formatAttendanceTime(record.checkedInAt)}`
-                                      : 'Waktu kehadiran belum tersedia'}
-                                  </Text>
-                                  <Text style={styles.cardDate}>{session.className}</Text>
-                                </View>
-                                <View style={styles.badge}>
-                                  <Text style={styles.badgeText}>Hadir</Text>
-                                </View>
-                              </View>
+                              <Text style={styles.cardDate}>
+                                {record.checkedInAt
+                                  ? `${dateLabel(record.checkedInAt)} · ${formatAttendanceTime(record.checkedInAt)}`
+                                  : 'Waktu kehadiran belum tersedia'}
+                              </Text>
+                              <Text style={styles.cardDate}>{session.className}</Text>
                             </View>
-                          ))}
+                            <View style={styles.badge}>
+                              <Text style={styles.badgeText}>Hadir</Text>
+                            </View>
+                          </View>
                         </View>
-                      </View>
-                    ))}
-                  </>
-                )}
+                      ))}
+                    </View>
+                  </View>
+                ))}
               </>
             )}
           </View>
@@ -244,35 +228,37 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
     paddingHorizontal: 24,
-    paddingBottom: 56,
+    paddingBottom: 40,
   },
-  title: { color: authColors.white, fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  title: { flex: 1, color: authColors.white, fontSize: 22, fontWeight: '800', textAlign: 'center' },
 
-  body: { paddingHorizontal: 20, marginTop: -28 },
+  body: { paddingHorizontal: 20, marginTop: 20 },
 
-  segment: {
-    flexDirection: 'row',
-    backgroundColor: authColors.white,
-    borderRadius: 16,
-    padding: 5,
+  // Kotak biru ringkasan
+  summaryCard: {
+    backgroundColor: authColors.navy,
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
     shadowColor: '#1B2A4E',
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
     shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    elevation: 5,
   },
-  segmentItem: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+  summaryRow: { flexDirection: 'row' },
+  summaryCol: { flex: 1 },
+  summaryValue: { color: authColors.white, fontSize: 28, fontWeight: '800' },
+  summaryLabel: { color: '#B6C2DB', fontSize: 11, marginTop: 2 },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    marginTop: 14,
+    overflow: 'hidden',
   },
-  segmentActive: { backgroundColor: authColors.navy },
-  segmentText: { color: authColors.muted, fontSize: 14, fontWeight: '700' },
-  segmentTextActive: { color: authColors.white },
+  progressFill: { height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
 
-  summaryLine: { color: '#52627A', fontSize: 13, marginTop: 16 },
   notice: { color: '#52627A', fontSize: 13, lineHeight: 20, marginTop: 8 },
 
   filterChips: { gap: 8, paddingTop: 14 },

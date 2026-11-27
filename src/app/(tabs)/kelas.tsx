@@ -13,16 +13,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // Import firestore udah digabung jadi satu di sini
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { Redirect } from 'expo-router';
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 
 import { AuthError, authColors } from '@/components/auth-ui';
 import { BackButton } from '@/components/back-button';
 import { BottomTabInset } from '@/constants/theme';
 import { useApp } from '@/context/app-context';
-import { db } from '@/lib/firebase';
-import { syncClassSessions } from '@/services/class-sync';
-import { hasRole } from '@/utils/roles';
 import {
   createClass,
   removeClass,
@@ -33,7 +30,13 @@ import {
   type ClassInput,
   type Participant,
 } from '@/lib/classes';
+import { db } from '@/lib/firebase';
+import { syncClassSessions } from '@/services/class-sync';
+import { hasRole } from '@/utils/roles';
 
+// Ruangan tidak lagi diisi di sini: ditentukan saat asisten membuat sesi.
+// Field `room` tetap ada di tipe ClassInput, jadi dikirim kosong (dan nilai
+// lama dipertahankan saat mengubah kelas).
 const EMPTY_FORM: ClassInput = { name: '', course: '', room: '' };
 
 // COURSE_OPTIONS udah dihapus karena sekarang ambil dari database
@@ -126,6 +129,7 @@ export default function KelasScreen() {
   const [saving, setSaving] = useState(false);
 
   const [pickerMode, setPickerMode] = useState<'course' | 'name' | 'student' | null>(null);
+  const [pickerSearch, setPickerSearch] = useState('');
   const [availableCourses, setAvailableCourses] = useState<{ label: string; value: string }[]>([]);
   
   const [toDelete, setToDelete] = useState<ClassData | null>(null);
@@ -207,6 +211,11 @@ export default function KelasScreen() {
     return () => unsubscribe();
   }, [currentUser?.id]);
 
+  // Kosongkan kolom cari setiap picker dibuka atau ditutup
+  useEffect(() => {
+    setPickerSearch('');
+  }, [pickerMode]);
+
   if (currentUser?.role !== 'asisten') return <Redirect href="/home" />;
 
   const activeClass = classes.find((c) => c.id === participantClassId) ?? null;
@@ -225,6 +234,7 @@ export default function KelasScreen() {
 
   const openEdit = (item: ClassData) => {
     setEditing(item);
+    // room lama dipertahankan agar data yang sudah ada tidak terhapus
     setForm({ name: item.name, course: item.course, room: item.room });
     setFormError(null);
     setFormOpen(true);
@@ -344,44 +354,85 @@ export default function KelasScreen() {
       options = CLASS_OPTIONS.map(o => ({ label: o, value: o }));
     } else if (pickerMode === 'student') {
       title = 'Pilih Praktikan';
+      const q = pickerSearch.trim().toLowerCase();
+      // Praktikan yang sudah ada di kelas ini tidak ditampilkan lagi
+      // (kecuali yang sedang diubah)
+      const enrolled = new Set((activeClass?.participants ?? []).map((p) => p.nim.trim()));
+
       options = users
         .filter((u) => typeof u.nim === 'string' && u.nim.trim() !== '')
+        .filter((u) => !enrolled.has(u.nim.trim()) || u.nim.trim() === editingNim)
+        .filter(
+          (u) =>
+            !q ||
+            String(u.name ?? '').toLowerCase().includes(q) ||
+            u.nim.toLowerCase().includes(q),
+        )
+        .sort((a, b) => a.nim.localeCompare(b.nim))
         .map(u => ({
           label: `${u.name} (${u.nim})`,
           value: { name: u.name, nim: u.nim },
         }));
     }
 
+    const emptyText =
+      pickerMode === 'student' && pickerSearch.trim()
+        ? `Tidak ada hasil untuk "${pickerSearch.trim()}".`
+        : 'Data tidak ditemukan.';
+
     return ( 
-      <Modal visible transparent animationType="fade">
-        <Pressable style={styles.modalOverlay} onPress={() => setPickerMode(null)}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{title}</Text>
-            <ScrollView style={{ maxHeight: 300 }}>
-              {options.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: '#64748B', marginTop: 20 }}>Data tidak ditemukan.</Text>
-              ) : (
-                options.map((opt, idx) => (
-                  <Pressable
-                    key={idx}
-                    style={styles.modalItem}
-                    onPress={() => {
-                      if (pickerMode === 'course') setForm(f => ({ ...f, course: opt.value }));
-                      else if (pickerMode === 'name') setForm(f => ({ ...f, name: opt.value }));
-                      else if (pickerMode === 'student') setPForm(opt.value);
-                      setPickerMode(null);
-                    }}
-                  >
-                    <Text style={styles.modalItemText}>{opt.label}</Text>
-                  </Pressable>
-                ))
+      <Modal
+        visible
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerMode(null)}
+      >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+          <Pressable style={styles.modalOverlay} onPress={() => setPickerMode(null)}>
+            <Pressable style={styles.modalContent} onPress={() => {}}>
+              <Text style={styles.modalTitle}>{title}</Text>
+
+              {pickerMode === 'student' && (
+                <View style={{ marginBottom: 12 }}>
+                  <TextInput
+                    style={styles.pickerSearch}
+                    value={pickerSearch}
+                    onChangeText={setPickerSearch}
+                    placeholder="Ketik nama atau NIM (contoh: 065)"
+                    placeholderTextColor="#94A3B8"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Text style={styles.pickerCount}>{options.length} praktikan</Text>
+                </View>
               )}
-            </ScrollView>
-            <Pressable style={styles.modalCloseBtn} onPress={() => setPickerMode(null)}>
-              <Text style={styles.modalCloseBtnText}>Tutup</Text>
+
+              <ScrollView style={{ maxHeight: 300 }} keyboardShouldPersistTaps="handled">
+                {options.length === 0 ? (
+                  <Text style={{ textAlign: 'center', color: '#64748B', marginTop: 20 }}>{emptyText}</Text>
+                ) : (
+                  options.map((opt, idx) => (
+                    <Pressable
+                      key={idx}
+                      style={styles.modalItem}
+                      onPress={() => {
+                        if (pickerMode === 'course') setForm(f => ({ ...f, course: opt.value }));
+                        else if (pickerMode === 'name') setForm(f => ({ ...f, name: opt.value }));
+                        else if (pickerMode === 'student') setPForm(opt.value);
+                        setPickerMode(null);
+                      }}
+                    >
+                      <Text style={styles.modalItemText}>{opt.label}</Text>
+                    </Pressable>
+                  ))
+                )}
+              </ScrollView>
+              <Pressable style={styles.modalCloseBtn} onPress={() => setPickerMode(null)}>
+                <Text style={styles.modalCloseBtnText}>Tutup</Text>
+              </Pressable>
             </Pressable>
-          </View>
-        </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     );
   };
@@ -389,20 +440,42 @@ export default function KelasScreen() {
   return ( 
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + BottomTabInset + 40 }} showsVerticalScrollIndicator={false}>
-        <View style={[styles.header, { paddingTop: insets.top + 28 }]}>
-          <View style={styles.headerInner}>
-            <View style={styles.headerTopRow}>
-              <BackButton />
-              <Text style={styles.headerEyebrow}>HADIRIN</Text>
-            </View>
-            <Text style={styles.headerTitle}>Kelola Kelas</Text>
-            <Text style={styles.headerSubtitle}>Tambah, ubah, dan hapus kelas praktikum.</Text>
+        {/* Header (sama seperti halaman Jadwal) */}
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+          <View style={styles.headerCircleA} />
+          <View style={styles.headerCircleB} />
 
-            <Pressable style={styles.addButton} onPress={openAdd}>
-              <Ionicons name="add" size={18} color={authColors.navy} />
-              <Text style={styles.addButtonText}>Tambah Kelas</Text>
-            </Pressable>
+          <View style={styles.headerInner}>
+            <View style={styles.headerRow}>
+              <BackButton />
+
+              <View style={styles.headerText}>
+                <Text style={styles.title}>Kelola Kelas</Text>
+                <Text style={styles.subtitle}>
+                  {loading ? 'Memuat kelas…' : `${classes.length} kelas praktikum`}
+                </Text>
+              </View>
+            </View>
           </View>
+        </View>
+
+        {/* Kartu aksi yang menumpuk di bawah header */}
+        <View style={styles.addWrap}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Tambah kelas"
+            onPress={openAdd}
+            style={({ pressed }) => [styles.addCard, pressed && { opacity: 0.85 }]}
+          >
+            <View style={styles.addIcon}>
+              <Ionicons name="add" size={22} color={authColors.navy} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.addTitle}>Tambah Kelas</Text>
+              <Text style={styles.addHint}>Buat kelas praktikum baru</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#64748B" />
+          </Pressable>
         </View>
 
         <View style={styles.listWrap}>
@@ -459,7 +532,9 @@ export default function KelasScreen() {
 
       <Sheet visible={formOpen} onClose={() => setFormOpen(false)} scroll>
         <Text style={styles.sheetTitle}>{editing ? 'Ubah Kelas' : 'Tambah Kelas'}</Text>
-        <Text style={styles.sheetSubtitle}>Isi data kelas praktikum.</Text>
+        <Text style={styles.sheetSubtitle}>
+          Isi data kelas praktikum. Ruangan dipilih saat membuat sesi.
+        </Text>
 
         <View style={{ gap: 14 }}>
           <View>
@@ -482,19 +557,6 @@ export default function KelasScreen() {
             </Pressable>
           </View>
 
-          <View>
-            <Text style={styles.dropdownLabel}>Ruangan</Text>
-            <Pressable style={styles.dropdownInput} onPress={() => {}}>
-               <Text style={styles.dropdownInputText}>Isi manual di bawah ini</Text>
-            </Pressable>
-            <View style={{ height: 10 }} /> 
-            <TextInput
-              style={styles.inputField}
-              value={form.room}
-              onChangeText={(v) => setForm((f) => ({ ...f, room: v }))}
-              placeholder="Contoh: Lab. RPL 01"
-            />
-          </View>
           <AuthError message={formError} />
         </View>
 
@@ -546,9 +608,9 @@ export default function KelasScreen() {
             <Text style={styles.dropdownLabel}>Pilih Praktikan</Text>
             <Pressable style={styles.dropdownInput} onPress={() => setPickerMode('student')}>
               <Text style={[styles.dropdownInputText, !pForm.name && { color: '#94A3B8' }]}>
-                {pForm.name ? `${pForm.name} (${pForm.nim})` : 'Klik untuk memilih'}
+                {pForm.name ? `${pForm.name} (${pForm.nim})` : 'Klik untuk mencari praktikan'}
               </Text>
-              <Ionicons name="chevron-down" size={18} color="#64748B" />
+              <Ionicons name="search" size={18} color="#64748B" />
             </Pressable>
           </View>
 
@@ -576,16 +638,49 @@ export default function KelasScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: authColors.background },
-  header: { backgroundColor: authColors.navy, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, paddingHorizontal: 24, paddingBottom: 56, alignItems: 'center' },
-  headerInner: { width: '100%', maxWidth: 800, gap: 6 },
-  headerTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
-  headerEyebrow: { color: '#5EEAD4', fontSize: 11, fontWeight: '800', letterSpacing: 1.6 },
-  headerTitle: { color: authColors.white, fontSize: 28, fontWeight: '800' },
-  headerSubtitle: { color: '#B6C2DB', fontSize: 14 },
-  addButton: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, backgroundColor: authColors.white, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 10, marginTop: 12 },
-  addButtonText: { color: authColors.navy, fontWeight: '800' },
-  listWrap: { alignItems: 'center', paddingHorizontal: 20, marginTop: -32 },
+  screen: { flex: 1, backgroundColor: '#F4F7FB' },
+
+  // Header, disamakan dengan halaman Jadwal
+  header: {
+    backgroundColor: '#1B2A4E',
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
+    paddingHorizontal: 24,
+    paddingBottom: 56,
+    overflow: 'hidden',
+    alignItems: 'center',
+  },
+  headerCircleA: { position: 'absolute', top: -60, right: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(96,165,250,0.18)' },
+  headerCircleB: { position: 'absolute', bottom: -70, left: -50, width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.05)' },
+  headerInner: { width: '100%', maxWidth: 800 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  headerText: { flex: 1 },
+  title: { color: '#FFFFFF', fontSize: 26, fontWeight: '800' },
+  subtitle: { color: '#CBD5E1', fontSize: 13, marginTop: 2 },
+
+  // Kartu "Tambah Kelas" (posisi dan gaya sama dengan kartu minggu di Jadwal)
+  addWrap: { alignItems: 'center', paddingHorizontal: 24, marginTop: -28 },
+  addCard: {
+    width: '100%',
+    maxWidth: 800,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    height: 60,
+    shadowColor: '#1B2A4E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 5,
+  },
+  addIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#E8EEF9', alignItems: 'center', justifyContent: 'center' },
+  addTitle: { fontSize: 15, fontWeight: '800', color: authColors.ink },
+  addHint: { fontSize: 11, color: '#64748B', marginTop: 2 },
+
+  listWrap: { alignItems: 'center', paddingHorizontal: 24, marginTop: 20 },
   list: { width: '100%', maxWidth: 800, gap: 14 },
   stateCard: { backgroundColor: authColors.white, borderRadius: 20, padding: 28, alignItems: 'center', gap: 8, shadowColor: '#1B2A4E', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
   stateIcon: { width: 52, height: 52, borderRadius: 16, backgroundColor: '#E8EEF9', alignItems: 'center', justifyContent: 'center' },
@@ -627,10 +722,11 @@ const styles = StyleSheet.create({
   dropdownLabel: { fontSize: 13, fontWeight: '600', color: authColors.muted, marginBottom: 6 },
   dropdownInput: { flexDirection: 'row', alignItems: 'center', backgroundColor: authColors.field, borderWidth: 1, borderColor: authColors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, justifyContent: 'space-between' },
   dropdownInputText: { fontSize: 14, color: authColors.ink, fontWeight: '500' },
-  inputField: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: authColors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: authColors.ink },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   modalContent: { backgroundColor: '#FFFFFF', borderRadius: 24, width: '100%', maxWidth: 400, padding: 24, maxHeight: '80%' },
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#1B2A4E', marginBottom: 16, textAlign: 'center' },
+  pickerSearch: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: authColors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: authColors.ink },
+  pickerCount: { fontSize: 12, color: '#64748B', marginTop: 6 },
   modalItem: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', alignItems: 'center' },
   modalItemText: { fontSize: 16, color: '#1B2A4E', fontWeight: '600' },
   modalCloseBtn: { marginTop: 16, paddingVertical: 14, backgroundColor: '#F1F5F9', borderRadius: 12, alignItems: 'center' },

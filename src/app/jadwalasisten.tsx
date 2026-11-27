@@ -1,7 +1,9 @@
 import { AsistenSessionCard } from '@/components/asisten-session-card';
 import { authColors } from '@/components/auth-ui';
 import { BackButton } from '@/components/back-button';
+import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
+import { createSession } from '@/services/assistant-service';
 import { sessionMs } from '@/utils/schedule';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
@@ -9,6 +11,7 @@ import { collection, onSnapshot, query } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SessionFormModal } from '../../features/asisten/components/SessionFormModal';
 
 const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const MONTHS = [
@@ -55,11 +58,13 @@ function weekHint(offset: number) {
 export default function JadwalAsistenScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { profile } = useAuth();
 
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
   const [tick, setTick] = useState(0);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -235,6 +240,33 @@ export default function JadwalAsistenScreen() {
           </>
         )}
       </ScrollView>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Tambah jadwal sesi"
+        onPress={() => setShowAddModal(true)}
+        style={({ pressed }) => [
+          styles.fab,
+          { bottom: insets.bottom + 96 },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <Ionicons name="add" size={30} color="#FFFFFF" />
+      </Pressable>
+
+      <SessionFormModal
+        visible={showAddModal}
+        mode="create"
+        onClose={() => setShowAddModal(false)}
+        onSubmit={async (data) => {
+          try {
+            await createSession(data, profile?.name || 'Asisten');
+            setShowAddModal(false);
+          } catch (error: any) {
+            alert(error.message);
+          }
+        }}
+      />
     </View>
   );
 }
@@ -273,6 +305,22 @@ const styles = StyleSheet.create({
   headerText: { flex: 1 },
   title: { color: '#FFFFFF', fontSize: 26, fontWeight: '800' },
   subtitle: { color: '#CBD5E1', fontSize: 13, marginTop: 2 },
+  fab: {
+    position: 'absolute',
+    right: 24,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#2F5AA8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1B2A4E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 10,
+  },
 
   // Navigasi minggu
   weekWrap: { paddingHorizontal: 24, marginTop: -28 },

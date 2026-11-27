@@ -1,21 +1,23 @@
-import React, { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
+  Pressable,
   StyleSheet,
   Text,
   View,
-  Pressable,
-  ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { useAuth } from '@/context/auth-context';
+import type { SessionInput } from '../../../src/services/assistant-service';
 import { useAsisten } from '../AsistenContext';
-import { SessionCard } from '../components/SessionCard';
 import { EmptyState } from '../components/EmptyState';
+import { SessionCard } from '../components/SessionCard';
 import { SessionFormModal } from '../components/SessionFormModal';
 import { theme } from '../theme';
-import type { SessionInput } from '../../../src/services/assistant-service';
 
 export function ScheduleScreen() {
   const router = useRouter();
@@ -63,7 +65,6 @@ export function ScheduleScreen() {
                 </Text>
               </View>
 
-              {/* PRD R2: Sembunyikan tombol tulis dan menu asisten untuk praktikan */}
               {isAsisten && (
                 <View style={styles.headerActions}>
                   <Pressable
@@ -74,10 +75,12 @@ export function ScheduleScreen() {
                   </Pressable>
 
                   <Pressable
-                    style={styles.addButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Tambah jadwal sesi"
+                    style={({ pressed }) => [styles.addButton, pressed && { opacity: 0.85 }]}
                     onPress={() => setShowAddModal(true)}
                   >
-                    <Text style={styles.addButtonText}>+ Sesi</Text>
+                    <Ionicons name="add" size={26} color="#FFFFFF" />
                   </Pressable>
                 </View>
               )}
@@ -109,7 +112,7 @@ export function ScheduleScreen() {
             title="Belum ada jadwal praktikum"
             subtitle={
               isAsisten
-                ? "Tekan tombol '+ Sesi' untuk membuat jadwal baru."
+                ? 'Tekan tombol + untuk membuat jadwal baru.'
                 : 'Sesi praktikum akan muncul saat dibuka oleh asisten.'
             }
           />
@@ -212,21 +215,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   addButton: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: theme.borderRadius.md,
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#2F5AA8',
     alignItems: 'center',
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: theme.fontSize.xs,
-    fontWeight: '700',
+    justifyContent: 'center',
+    shadowColor: '#2F5AA8',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
 });
