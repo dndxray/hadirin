@@ -297,9 +297,6 @@ function SelectedSession({ session }: { session: CloudSession }) {
 
       {!attended && !requested ? (
         <>
-          {session.status !== 'open' ? (
-            <Notice text="Presensi hanya tersedia setelah asisten membuka sesi. Status tersimpan di server yang menentukan izin presensi." />
-          ) : null}
 
           <View style={[styles.card, styles.labCard]}>
             <View style={styles.infoRow}>
