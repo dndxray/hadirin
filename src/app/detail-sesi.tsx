@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,28 +13,31 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { doc, onSnapshot } from 'firebase/firestore';
 
-import { SessionEnrollment } from '@/components/session-enrollment';
 import { BackButton } from '@/components/back-button';
+import { SessionEnrollment } from '@/components/session-enrollment';
 import { StateView } from '@/components/state-view';
 import { useAttendance } from '@/context/attendance-context';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { syncClassSessions } from '@/services/class-sync';
 import {
   deleteSession,
+  ensureSessionQrToken,
   setSessionStatus,
   subscribeSessionAttendances,
   updateSession,
 } from '@/services/assistant-service';
+import { syncClassSessions } from '@/services/class-sync';
+import { notifyUsers } from '@/services/notification-service';
 import { firebaseErrorMessage } from '@/utils/firebase-error';
 import { initials } from '@/utils/home-format';
 import { getSessionStatus, isSessionFinished } from '@/utils/session-status';
 import { SessionFormModal } from '../../features/asisten/components/SessionFormModal';
 import { SessionQRModal } from '../../features/asisten/components/SessionQRModal';
-import { notifyUsers } from '@/services/notification-service';
 import type { Attendance } from '../../features/asisten/types';
+
+// Aturan token sama dengan parseAttendanceQr di utils/attendance-location.ts
+const QR_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 
 function timePart(range?: string, index = 0) {
   if (!range) return '';
@@ -58,6 +62,8 @@ export default function DetailSesiScreen() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [qrBusy, setQrBusy] = useState(false);
+  const [generatedQrToken, setGeneratedQrToken] = useState<string | null>(null);
 
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
@@ -173,6 +179,13 @@ export default function DetailSesiScreen() {
   const attended = records.some((record) => record.sessionId === session.id);
   const requested = permissions.some((request) => request.sessionId === session.id);
 
+  // Token QR: pakai yang ada di dokumen sesi, atau yang baru dibuat untuk sesi lama
+  const snapshotQrToken =
+    typeof session.qrToken === 'string' && QR_TOKEN_PATTERN.test(session.qrToken)
+      ? session.qrToken
+      : null;
+  const qrToken = snapshotQrToken ?? generatedQrToken ?? undefined;
+
   const statusChip = status === 'open'
     ? { label: 'Sesi sedang dibuka', color: '#15803D', background: '#E6F6EC' }
     : status === 'upcoming'
@@ -185,6 +198,25 @@ export default function DetailSesiScreen() {
       ? 'Sesi Telah Berakhir'
       : 'Buka Sesi Praktikum';
 
+
+  async function openQR() {
+    if (qrBusy) return;
+    if (qrToken) {
+      setShowQR(true);
+      return;
+    }
+    setQrBusy(true);
+    setError(null);
+    try {
+      const token = await ensureSessionQrToken(session.id);
+      setGeneratedQrToken(token);
+      setShowQR(true);
+    } catch (failure: any) {
+      setError(failure?.message || firebaseErrorMessage(failure));
+    } finally {
+      setQrBusy(false);
+    }
+  }
 
   async function executeToggle() {
     setShowConfirm(false);
@@ -284,11 +316,21 @@ export default function DetailSesiScreen() {
               <View style={{ width: '100%', gap: 12 }}>
                 {status === 'open' ? (
                   <Pressable
-                    onPress={() => setShowQR(true)}
-                    style={({ pressed }) => [styles.actionBtnOutline, pressed && { opacity: 0.7 }]}
+                    onPress={() => void openQR()}
+                    disabled={qrBusy}
+                    style={({ pressed }) => [
+                      styles.actionBtnOutline,
+                      (pressed || qrBusy) && { opacity: 0.7 },
+                    ]}
                   >
-                    <Ionicons name="qr-code-outline" size={18} color="#1B2A4E" />
-                    <Text style={styles.actionBtnTextOutline}>Tampilkan QR Code</Text>
+                    {qrBusy ? (
+                      <ActivityIndicator size="small" color="#1B2A4E" />
+                    ) : (
+                      <Ionicons name="qr-code-outline" size={18} color="#1B2A4E" />
+                    )}
+                    <Text style={styles.actionBtnTextOutline}>
+                      {qrBusy ? 'Menyiapkan QR...' : 'Tampilkan QR Code'}
+                    </Text>
                   </Pressable>
                 ) : null}
                 <Pressable
@@ -414,6 +456,7 @@ export default function DetailSesiScreen() {
       <SessionQRModal
         visible={showQR}
         sessionId={session.id}
+        qrToken={qrToken}
         courseName={session.courseName}
         className={session.className}
         onClose={() => setShowQR(false)}
