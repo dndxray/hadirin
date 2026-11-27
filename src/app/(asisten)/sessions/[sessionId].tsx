@@ -29,8 +29,12 @@ import {
 import { formatDate } from '../../../../features/asisten/utils/format';
 import {
   SessionInput,
+  ensureSessionQrToken,
   subscribeSessionAttendances,
 } from '../../../../src/services/assistant-service';
+
+// Aturan token sama dengan parseAttendanceQr di utils/attendance-location.ts
+const QR_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 
 export default function SessionDetailScreen() {
   const params = useLocalSearchParams<{ sessionId: string }>();
@@ -55,6 +59,8 @@ export default function SessionDetailScreen() {
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [qrBusy, setQrBusy] = useState(false);
+  const [generatedQrToken, setGeneratedQrToken] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -92,6 +98,33 @@ export default function SessionDetailScreen() {
         att.practitionerNim.toLowerCase().includes(lowerQuery)
     );
   })();
+
+  // Token QR: pakai yang ada di data sesi, atau yang baru dibuat untuk sesi lama
+  const sessionQrToken = (session as any)?.qrToken;
+  const snapshotQrToken =
+    typeof sessionQrToken === 'string' && QR_TOKEN_PATTERN.test(sessionQrToken)
+      ? sessionQrToken
+      : null;
+  const qrToken = snapshotQrToken ?? generatedQrToken ?? undefined;
+
+  const handleShowQR = async () => {
+    if (!session || qrBusy) return;
+    if (qrToken) {
+      setShowQR(true);
+      return;
+    }
+    setQrBusy(true);
+    setActionError(null);
+    try {
+      const token = await ensureSessionQrToken(session.id);
+      setGeneratedQrToken(token);
+      setShowQR(true);
+    } catch (err: any) {
+      setActionError(err.message || 'Gagal menyiapkan QR sesi');
+    } finally {
+      setQrBusy(false);
+    }
+  };
 
   const handleOpenSession = async () => {
     if (!session || busy) return;
@@ -287,14 +320,20 @@ export default function SessionDetailScreen() {
         {isSessionOpen(session.status) && (
           <>
             <Pressable
+              disabled={qrBusy}
               style={[
                 styles.button,
                 styles.actionButton,
                 { backgroundColor: theme.colors.primary, marginBottom: theme.spacing.sm },
+                qrBusy && { opacity: 0.6 },
               ]}
-              onPress={() => setShowQR(true)}
+              onPress={() => void handleShowQR()}
             >
-              <Text style={styles.buttonText}>Tampilkan QR Code</Text>
+              {qrBusy ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Tampilkan QR Code</Text>
+              )}
             </Pressable>
 
             <Pressable
@@ -447,6 +486,7 @@ export default function SessionDetailScreen() {
       <SessionQRModal
         visible={showQR}
         sessionId={session.id}
+        qrToken={qrToken}
         courseName={session.courseName}
         className={displayKelas}
         onClose={() => setShowQR(false)}
