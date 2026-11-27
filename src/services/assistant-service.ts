@@ -49,6 +49,67 @@ export type SessionInput = {
 const userProfileCache = new Map<string, { name: string; nim: string }>();
 const aiInFlight = new Set<string>();
 
+// Aturan token sama dengan parseAttendanceQr di utils/attendance-location.ts
+const QR_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
+const QR_TOKEN_ALPHABET =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+/**
+ * Token acak untuk QR presensi sesi. Dipakai praktikan untuk membuktikan
+ * bahwa QR yang dipindai berasal dari sesi ini.
+ */
+export function generateQrToken(length = 32): string {
+  const bytes = new Uint8Array(length);
+  const webCrypto = (globalThis as any).crypto;
+  if (webCrypto?.getRandomValues) {
+    webCrypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < length; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  let token = '';
+  for (let i = 0; i < length; i += 1) {
+    token += QR_TOKEN_ALPHABET[bytes[i] % QR_TOKEN_ALPHABET.length];
+  }
+  return token;
+}
+
+/**
+ * Memastikan sesi punya qrToken yang valid. Sesi lama (dibuat sebelum fitur
+ * token ada) belum punya token, jadi dibuatkan saat QR pertama kali dibuka.
+ */
+export async function ensureSessionQrToken(sessionId: string): Promise<string> {
+  const user = auth?.currentUser;
+  if (!user || !db) {
+    throw new Error('Autentikasi Firebase diperlukan untuk membuat QR sesi.');
+  }
+
+  const sessionRef = doc(db, 'sessions', sessionId);
+  const snap = await getDoc(sessionRef);
+  if (!snap.exists()) {
+    throw new Error('Sesi praktikum tidak ditemukan.');
+  }
+
+  const existing = snap.data().qrToken;
+  if (typeof existing === 'string' && QR_TOKEN_PATTERN.test(existing)) {
+    return existing;
+  }
+
+  const token = generateQrToken();
+  try {
+    await updateDoc(sessionRef, { qrToken: token });
+  } catch (err: any) {
+    if (err?.code === 'permission-denied') {
+      throw new Error(
+        'Izin ditolak (permission-denied): Rules Firestore tidak mengizinkan asisten menyimpan qrToken pada sesi.'
+      );
+    }
+    throw new Error(err?.message || 'Gagal membuat token QR sesi.');
+  }
+  return token;
+}
+
 export async function resolvePractitionerProfile(
   uid: string
 ): Promise<{ name: string; nim: string }> {
@@ -195,6 +256,8 @@ export async function createSession(
       dateTimestamp: dateTimestamp,
       startTime: input.startTime?.trim() || '',
       endTime: input.endTime?.trim() || '',
+      // Token QR presensi: dipakai scanner praktikan untuk memvalidasi QR sesi ini.
+      qrToken: generateQrToken(),
       // Lab dan radius presensi (SRS-32). Hanya disimpan kalau dipilih,
       // karena Firestore menolak nilai undefined.
       ...(input.labId ? { labId: input.labId, radiusM: input.radiusM ?? 50 } : {}),
@@ -382,6 +445,7 @@ export function subscribeAssistantSessions(
           room: raw.room ?? '',
           labId: raw.labId,
           radiusM: raw.radiusM,
+          qrToken: raw.qrToken,
           assistantId: raw.assistantId ?? '',
           assistantName: raw.assistantName ?? '',
           status: normalizeSessionStatus(raw.status) ?? 'upcoming',

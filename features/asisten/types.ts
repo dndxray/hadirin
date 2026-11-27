@@ -31,6 +31,8 @@ export interface Session {
   room: string;
   labId?: string;
   radiusM?: number;
+  /** Token QR presensi sesi; harus sama dengan yang ada di payload QR. */
+  qrToken?: string;
   assistantId?: string;
   assistantName?: string;
   status: SessionStatus;
