@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 
 import { ClassData, subscribeClasses } from '../../../src/lib/classes';
-import { LABS, RADIUS_OPTIONS } from '../../../src/lib/geo';
+import { LABS } from '../../../src/lib/geo';
 import {
   resolveParticipantUids,
   type ClassParticipant,
@@ -39,6 +39,8 @@ const MONTH_NAMES = [
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
 const DEFAULT_RADIUS = 50;
+const MIN_RADIUS = 5;
+const MAX_RADIUS = 1000;
 
 const TIME_OPTIONS: string[] = [];
 for (let h = 7; h <= 20; h++) {
@@ -59,8 +61,6 @@ function getGMT7Date(): Date {
   return new Date(utcMs + 7 * 3600000);
 }
 
-const normalizeLabName = (s: string) => s.toLowerCase().replace(/\s+/g, '');
-
 export function SessionFormModal({
   visible,
   mode,
@@ -74,9 +74,11 @@ export function SessionFormModal({
   const [courseCode, setCourseCode] = useState('');
   const [classId, setClassId] = useState('');
   const [className, setClassName] = useState('');
+  // Ruangan sekarang ditentukan di sini (dari laboratorium yang dipilih),
+  // bukan dari data kelas.
   const [room, setRoom] = useState('');
   const [labId, setLabId] = useState('');
-  const [radiusM, setRadiusM] = useState<number>(DEFAULT_RADIUS);
+  const [radiusText, setRadiusText] = useState(String(DEFAULT_RADIUS));
   const [description, setDescription] = useState('');
   const [participantIds, setParticipantIds] = useState<string[]>([]);
 
@@ -114,7 +116,7 @@ export function SessionFormModal({
     setClassName(initialData?.className || '');
     setRoom(initialData?.room || '');
     setLabId(initialData?.labId || '');
-    setRadiusM(initialData?.radiusM ?? DEFAULT_RADIUS);
+    setRadiusText(String(initialData?.radiusM ?? DEFAULT_RADIUS));
     setDescription(initialData?.description || '');
     setParticipantIds(initialData?.participantIds || []);
     setMapping(null);
@@ -155,6 +157,9 @@ export function SessionFormModal({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const selectedLab = LABS.find((l) => l.id === labId);
+  // Ruangan yang disimpan: nama lab terpilih; untuk sesi lama yang belum
+  // punya lab, pakai ruangan yang sudah ada sampai lab dipilih.
+  const roomValue = selectedLab?.name ?? room;
 
   const handleSelectCourse = (course: string) => {
     setCourseName(course);
@@ -162,7 +167,6 @@ export function SessionFormModal({
     if (available.length > 0) {
       setClassName('');
       setClassId('');
-      setRoom('');
       setParticipantIds([]);
       setMapping(null);
     }
@@ -172,14 +176,6 @@ export function SessionFormModal({
     const requestId = ++mappingRequest.current;
     setClassName(c.name);
     setClassId(c.id);
-    if (c.room) {
-      setRoom(c.room);
-      // Pilih lab otomatis kalau nama lab sama dengan ruangan kelas (mis. "Lab C")
-      const match = LABS.find(
-        (l) => normalizeLabName(l.name) === normalizeLabName(c.room as string)
-      );
-      if (match) setLabId(match.id);
-    }
 
     if (c.participants.length === 0) {
       setParticipantIds([]);
@@ -259,8 +255,15 @@ export function SessionFormModal({
   const handleSave = async () => {
     if (!courseName.trim()) return setError('Pilih Mata Kuliah terlebih dahulu.');
     if (!className.trim()) return setError('Pilih Kelas Praktikum terlebih dahulu.');
-    if (!room.trim()) return setError('Ruangan praktikum wajib diisi.');
-    if (!labId) return setError('Pilih Laboratorium sebagai lokasi presensi.');
+    if (!labId) return setError('Pilih Laboratorium (ruangan dan lokasi presensi).');
+
+    const radiusValue = Math.round(Number(radiusText.trim().replace(',', '.')));
+    if (!radiusText.trim() || !Number.isFinite(radiusValue)) {
+      return setError('Isi radius presensi dengan angka (dalam meter).');
+    }
+    if (radiusValue < MIN_RADIUS || radiusValue > MAX_RADIUS) {
+      return setError(`Radius presensi harus antara ${MIN_RADIUS} dan ${MAX_RADIUS} meter.`);
+    }
     
     const today = getGMT7Date();
     today.setHours(0, 0, 0, 0);
@@ -284,9 +287,9 @@ export function SessionFormModal({
         className: className.trim(),
         dateLabel: dateLabelFormatted,
         timeRange: timeRangeFormatted,
-        room: room.trim(),
+        room: roomValue.trim(),
         labId,
-        radiusM,
+        radiusM: radiusValue,
         description: description.trim(),
         participantIds,
         date: selectedDate,
@@ -302,7 +305,19 @@ export function SessionFormModal({
     }
   };
 
-  const availableStartTimes = TIME_OPTIONS.slice(0, -1);
+  const nowGMT7 = getGMT7Date();
+  const isToday = selectedDate.getDate() === nowGMT7.getDate() && 
+                  selectedDate.getMonth() === nowGMT7.getMonth() && 
+                  selectedDate.getFullYear() === nowGMT7.getFullYear();
+
+  const currentTimeStr = `${nowGMT7.getHours().toString().padStart(2, '0')}:${nowGMT7.getMinutes().toString().padStart(2, '0')}`;
+
+  const availableStartTimes = TIME_OPTIONS.filter((t) => {
+    if (t >= endTime) return false;
+    if (isToday && t <= currentTimeStr) return false;
+    return true;
+  });
+
   const availableEndTimes = TIME_OPTIONS.filter((t) => t > startTime);
 
   const renderPickerModal = () => {
@@ -321,7 +336,7 @@ export function SessionFormModal({
     } else if (activePicker === 'class') {
       title = 'Pilih Kelas';
       options = filteredClasses.map(c => ({
-        label: `${c.name} (${c.room || 'Lab'})`,
+        label: c.name,
         value: c.name,
         onPress: () => void handleSelectClass(c)
       }));
@@ -330,7 +345,10 @@ export function SessionFormModal({
       options = LABS.map(l => ({
         label: l.name,
         value: l.id,
-        onPress: () => setLabId(l.id)
+        onPress: () => {
+          setLabId(l.id);
+          setRoom(l.name);
+        }
       }));
     } else if (activePicker === 'start') {
       title = 'Jam Mulai';
@@ -434,48 +452,48 @@ export function SessionFormModal({
               )}
             </View>
 
-            <View style={styles.row}>
-              <View style={[styles.fieldGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Kode Matkul</Text>
-                <TextInput style={styles.inputDisabled} value={courseCode} editable={false} placeholder="Otomatis" />
-              </View>
-              <View style={[styles.fieldGroup, { flex: 1, marginLeft: 12 }]}>
-                <Text style={styles.label}>Ruangan</Text>
-                <TextInput style={styles.inputDisabled} value={room} editable={false} placeholder="Otomatis" />
-              </View>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Kode Matkul</Text>
+              <TextInput
+                style={styles.inputDisabled}
+                value={courseCode}
+                editable={false}
+                placeholder="Otomatis"
+                placeholderTextColor="#94A3B8"
+              />
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Laboratorium (Lokasi Presensi)</Text>
+              <Text style={styles.label}>Laboratorium (Ruangan dan Lokasi Presensi)</Text>
               <Pressable style={styles.dropdownInput} onPress={() => setActivePicker('lab')}>
                 <Text style={[styles.dropdownInputText, !selectedLab && { color: '#94A3B8' }]}>
-                  {selectedLab?.name || 'Pilih Laboratorium'}
+                  {selectedLab?.name || (room ? `${room} (pilih lab untuk memperbarui)` : 'Pilih Laboratorium')}
                 </Text>
                 <Ionicons name="location-outline" size={18} color="#64748B" />
               </Pressable>
+              <Text style={styles.hintText}>
+                Ruangan sesi otomatis mengikuti laboratorium yang dipilih.
+              </Text>
             </View>
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Radius Presensi</Text>
-              <View style={styles.chipRow}>
-                {RADIUS_OPTIONS.map((r) => {
-                  const selected = radiusM === r;
-                  return (
-                    <Pressable
-                      key={r}
-                      disabled={busy}
-                      onPress={() => setRadiusM(r)}
-                      style={[styles.radiusChip, selected && styles.radiusChipSelected]}
-                    >
-                      <Text style={[styles.radiusChipText, selected && styles.radiusChipTextSelected]}>
-                        {r} m
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+              <View style={styles.radiusRow}>
+                <TextInput
+                  style={styles.radiusInput}
+                  value={radiusText}
+                  onChangeText={(v) => setRadiusText(v.replace(/[^0-9.,]/g, ''))}
+                  keyboardType="numeric"
+                  placeholder="Contoh: 50"
+                  placeholderTextColor="#94A3B8"
+                  editable={!busy}
+                  maxLength={6}
+                />
+                <Text style={styles.radiusUnit}>meter</Text>
               </View>
               <Text style={styles.hintText}>
-                Praktikan harus berada dalam radius ini dari lab untuk bisa presensi.
+                Praktikan harus berada dalam jangkauan ini dari lab untuk bisa presensi
+                ({MIN_RADIUS}–{MAX_RADIUS} meter).
               </Text>
             </View>
 
@@ -533,7 +551,8 @@ export function SessionFormModal({
                 multiline 
                 numberOfLines={2} 
                 editable={!busy} 
-                placeholder="Contoh: Modul 4 - Firebase" 
+                placeholder="Contoh: Modul 4 - Firebase"
+                placeholderTextColor="#94A3B8"
               />
             </View>
 
@@ -569,14 +588,12 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#1B2A4E' },
   inputDisabled: { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#64748B' },
   dropdownInput: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, justifyContent: 'space-between' },
-  dropdownInputText: { fontSize: 14, color: '#1B2A4E', fontWeight: '500' },
+  dropdownInputText: { fontSize: 14, color: '#1B2A4E', fontWeight: '500', flexShrink: 1 },
   multilineInput: { minHeight: 70, textAlignVertical: 'top' },
   mappingText: { fontSize: 12, color: '#15803D', marginTop: 8, fontWeight: '600' },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  radiusChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, backgroundColor: '#F1F5F9' },
-  radiusChipSelected: { backgroundColor: '#1B2A4E' },
-  radiusChipText: { fontSize: 13, fontWeight: '700', color: '#64748B' },
-  radiusChipTextSelected: { color: '#FFFFFF' },
+  radiusRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  radiusInput: { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#1B2A4E' },
+  radiusUnit: { fontSize: 14, fontWeight: '700', color: '#64748B' },
   hintText: { fontSize: 12, color: '#64748B', marginTop: 8 },
   calendarContainer: { marginTop: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16, padding: 16, elevation: 2 },
   calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingHorizontal: 4 },
