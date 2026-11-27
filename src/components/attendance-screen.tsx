@@ -21,6 +21,11 @@ import { firebaseErrorMessage } from '@/utils/firebase-error';
 
 const QrScanner = lazy(() => import('@/components/attendance-qr-scanner'));
 const STATUS = { upcoming: 'Belum dibuka', open: 'Dibuka', closed: 'Ditutup' } as const;
+const STATUS_COLOR = {
+  upcoming: { bg: '#EEF1F6', fg: '#64748B' },
+  open: { bg: '#E6F6EC', fg: '#15803D' },
+  closed: { bg: '#FEE2E2', fg: '#B91C1C' },
+} as const;
 
 export default function AttendanceScreen() {
   const { profile, loading } = useAuth();
@@ -30,54 +35,117 @@ export default function AttendanceScreen() {
   const [choice, setChoice] = useState({ requested, selected: requested });
   const selectedId = choice.requested === requested ? choice.selected : requested;
   const { sessions, sessionState, retry } = useAttendance();
-  const selected = sessions.find(session => session.id === selectedId);
+  const selected = sessions.find((session) => session.id === selectedId);
   if (loading) return <StateView kind="loading" title="Memuat akun" />;
   if (!profile) return <Redirect href="/login" />;
   if (profile.role !== 'praktikan') return <Redirect href="/home" />;
 
-  return <View style={styles.screen}>
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + BottomTabInset + 32 }}>
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}><View style={styles.inner}>
-        <BackButton
-          accessibilityLabel="Kembali ke halaman sebelumnya"
-          onPress={() => router.canGoBack() ? router.back() : router.replace('/home')}
-          style={styles.back}
-        />
-        <Text accessibilityRole="header" style={styles.title}>Presensi</Text>
-        <Text style={styles.subtitle}>Periksa sesi dan lokasi lab sebelum mencatat kehadiran.</Text>
-      </View></View>
-      <View style={[styles.inner, styles.body]}>
-        {sessionState.loading ? <StateView kind="loading" title="Memuat sesi praktikum" />
-          : sessionState.error ? <StateView kind="error" title="Sesi belum dapat dimuat" message={sessionState.error} actionLabel="Coba lagi" onAction={retry} />
-          : !sessions.length ? <StateView kind="empty" title="Belum ada sesi untukmu" message="Minta asisten menambahkan NIM akunmu ke peserta sesi. Sesi yang terdaftar akan muncul di sini." />
-          : <>
-            {!selected ? <><Text accessibilityRole="header" style={styles.sectionTitle}>Pilih sesi</Text>
-            {sessions.map(session => <Pressable key={session.id} accessibilityRole="radio"
-              accessibilityLabel={`${session.courseName}, ${session.className}, ${STATUS[session.status] ?? 'Status tidak valid'}`}
-              accessibilityState={{ checked: selectedId === session.id }} onPress={() => setChoice({ requested, selected: session.id })}
-              style={({ pressed }) => [styles.sessionOption, selectedId === session.id && styles.selectedOption, pressed && styles.pressed]}>
-              <View style={styles.flex}><Text style={styles.optionTitle}>{session.courseName}</Text>
-                <Text style={styles.meta}>{session.className} · {session.dateLabel} · {session.timeRange}</Text></View>
-              <Text style={styles.status}>{STATUS[session.status] ?? 'Tidak valid'}</Text>
-              <Ionicons name={selectedId === session.id ? 'radio-button-on' : 'radio-button-off'} size={22} color={authColors.navy} />
-            </Pressable>)}</> : null}
-            {selected ? <>
-              <Action label="Pilih sesi lain" icon="swap-horizontal-outline" secondary onPress={() => {
-                setChoice({ requested, selected: '' });
-                if (requested) router.replace('/presensi');
-              }} />
-              <SelectedSession key={`${profile.uid}:${selected.id}`} session={selected} />
+  return (
+    <View style={styles.screen}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + BottomTabInset + 32 }}
+      >
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+          <View style={[styles.inner, styles.headerRow]}>
+            <BackButton
+              accessibilityLabel="Kembali ke halaman sebelumnya"
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
+            />
+            <Text accessibilityRole="header" style={styles.title}>Presensi</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+        </View>
+
+        <View style={[styles.inner, styles.body]}>
+          {sessionState.loading ? (
+            <StateView kind="loading" title="Memuat sesi praktikum" />
+          ) : sessionState.error ? (
+            <StateView kind="error" title="Sesi belum dapat dimuat" message={sessionState.error} actionLabel="Coba lagi" onAction={retry} />
+          ) : !sessions.length ? (
+            <StateView
+              kind="empty"
+              title="Belum ada sesi untukmu"
+              message="Minta asisten menambahkan NIM akunmu ke peserta sesi. Sesi yang terdaftar akan muncul di sini."
+            />
+          ) : (
+            <>
+              {!selected ? (
+                <View style={styles.card}>
+                  <Text accessibilityRole="header" style={styles.cardTitle}>Pilih sesi</Text>
+                  {sessions.map((session) => {
+                    const sc = STATUS_COLOR[session.status] ?? STATUS_COLOR.upcoming;
+                    return (
+                      <Pressable
+                        key={session.id}
+                        accessibilityRole="radio"
+                        accessibilityLabel={`${session.courseName}, ${session.className}, ${STATUS[session.status] ?? 'Status tidak valid'}`}
+                        accessibilityState={{ checked: selectedId === session.id }}
+                        onPress={() => setChoice({ requested, selected: session.id })}
+                        style={({ pressed }) => [
+                          styles.sessionOption,
+                          selectedId === session.id && styles.selectedOption,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <View style={styles.flex}>
+                          <Text style={styles.optionTitle}>{session.courseName}</Text>
+                          <Text style={styles.meta}>
+                            {session.className} · {session.dateLabel} · {session.timeRange}
+                          </Text>
+                        </View>
+                        <View style={[styles.pill, { backgroundColor: sc.bg }]}>
+                          <Text style={[styles.pillText, { color: sc.fg }]}>
+                            {STATUS[session.status] ?? 'Tidak valid'}
+                          </Text>
+                        </View>
+                        <Ionicons
+                          name={selectedId === session.id ? 'radio-button-on' : 'radio-button-off'}
+                          size={22}
+                          color={authColors.navy}
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              {selected ? (
+                <>
+                  <SelectedSession key={`${profile.uid}:${selected.id}`} session={selected} />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Pilih sesi lain"
+                    onPress={() => {
+                      setChoice({ requested, selected: '' });
+                      if (requested) router.replace('/presensi');
+                    }}
+                    style={styles.changeLink}
+                  >
+                    <Ionicons name="swap-horizontal-outline" size={18} color={authColors.navy} />
+                    <Text style={styles.changeLinkText}>Pilih sesi lain</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <StateView
+                  kind={selectedId ? 'error' : 'empty'}
+                  title={selectedId ? 'Sesi tidak tersedia untuk akunmu' : 'Pilih sesi untuk melanjutkan'}
+                  message={
+                    selectedId
+                      ? 'Sesi mungkin dihapus atau kamu belum menjadi peserta. Pilih sesi lain atau hubungi asisten.'
+                      : 'Informasi lab, pemeriksaan lokasi, dan tombol presensi akan tampil setelah sesi dipilih.'
+                  }
+                />
+              )}
             </>
-              : <StateView kind={selectedId ? 'error' : 'empty'} title={selectedId ? 'Sesi tidak tersedia untuk akunmu' : 'Pilih sesi untuk melanjutkan'}
-                message={selectedId ? 'Sesi mungkin dihapus atau kamu belum menjadi peserta. Pilih sesi lain atau hubungi asisten.' : 'Informasi lab, pemeriksaan lokasi, dan tombol presensi akan tampil setelah sesi dipilih.'} />}
-          </>}
-      </View>
-    </ScrollView>
-  </View>;
+          )}
+        </View>
+      </ScrollView>
+    </View>
+  );
 }
 
 function SelectedSession({ session }: { session: CloudSession }) {
-  const { profile } = useAuth();
   const { checkIn, records, permissions, sessionState, attendanceState, permissionState, retry } = useAttendance();
   const labState = useSessionLab(session.labId);
   const insets = useSafeAreaInsets();
@@ -104,7 +172,7 @@ function SelectedSession({ session }: { session: CloudSession }) {
     const tick = () => { setNow(Date.now()); };
     const startTimer = () => { if (!timer) timer = setInterval(tick, 5000); };
     if (AppState.currentState === 'active') startTimer();
-    const appState = AppState.addEventListener('change', state => {
+    const appState = AppState.addEventListener('change', (state) => {
       if (state === 'background') {
         if (timer) { clearInterval(timer); timer = undefined; }
         locationRequest.current?.abort(); setPosition(null); setScanner(false);
@@ -118,8 +186,8 @@ function SelectedSession({ session }: { session: CloudSession }) {
     };
   }, []));
 
-  const attended = records.some(item => item.sessionId === session.id);
-  const requested = permissions.some(item => item.sessionId === session.id);
+  const attended = records.some((item) => item.sessionId === session.id);
+  const requested = permissions.some((item) => item.sessionId === session.id);
   const stateError = sessionState.error || attendanceState.error || permissionState.error;
   const loading = sessionState.loading || attendanceState.loading || permissionState.loading;
   const cached = sessionState.fromCache || attendanceState.fromCache || permissionState.fromCache || labState.fromCache;
@@ -170,104 +238,373 @@ function SelectedSession({ session }: { session: CloudSession }) {
     } finally { lock.current = false; if (alive.current) setBusy(false); }
   }
 
-  return <View style={styles.details}>
-    <View style={styles.section}>
-      <Text accessibilityRole="header" style={styles.sectionTitle}>{session.courseName}</Text>
-      <Text style={styles.meta}>{session.className} · {session.room}</Text>
-      <Text style={styles.text}>{session.dateLabel}{'\n'}{session.timeRange}</Text>
-      <Text style={styles.meta}>Asisten: {session.assistantName}</Text>
-      <Text style={styles.status}>Status sesi: {STATUS[session.status] ?? 'Tidak valid'}</Text>
-    </View>
-    {attended ? <StateView kind="empty" title="Presensi sudah tercatat" message="Kehadiranmu tersimpan. Kamu tidak dapat melakukan presensi dua kali pada sesi yang sama."
-      actionLabel="Lihat Riwayat" onAction={() => router.push('/explore')} />
-      : requested ? <StateView kind="empty" title="Izin sudah diajukan" message="Presensi tidak dapat dicatat bersamaan dengan izin pada sesi yang sama. Periksa pengajuan di Riwayat."
-        actionLabel="Lihat status izin" onAction={() => router.push('/explore')} /> : null}
-    {loading ? <StateView kind="loading" title="Memeriksa catatan akun" /> : null}
-    {stateError ? <StateView kind="error" message={stateError} actionLabel="Coba lagi" onAction={retry} /> : null}
-    {cached ? <Notice text="Data masih dari cache. Sambungkan internet dan tunggu sinkronisasi server sebelum presensi." /> : null}
-    {!attended && !requested ? <>
-      {session.status !== 'open' ? <Notice text="Presensi hanya tersedia setelah asisten membuka sesi. Status tersimpan di server yang menentukan izin presensi." /> : null}
-      <View style={styles.section}>
-        <Text accessibilityRole="header" style={styles.sectionTitle}>Lokasi laboratorium</Text>
-        {labState.loading ? <StateView kind="loading" title="Memuat laboratorium" />
-          : labState.error ? <StateView kind="error" message={labState.error} actionLabel="Muat ulang lab" onAction={labState.retry} />
-          : labState.lab ? <><Text style={styles.text}>{labState.lab.name}</Text>
-            <Text style={styles.meta}>Radius presensi: {radius} meter. Lokasi hanya diperiksa saat kamu menggunakan halaman ini.</Text></> : null}
-        {assessment ? <View accessibilityLiveRegion="polite" style={[styles.locationResult, !assessment.inside && styles.locationOutside]}>
-          <Ionicons name={assessment.inside ? 'checkmark-circle-outline' : 'location-outline'} size={24} color={assessment.inside ? '#166534' : '#92400E'} />
-          <View style={styles.flex}><Text style={styles.resultTitle}>{assessment.inside ? 'Di dalam radius lab' : 'Di luar radius lab'}</Text>
-            <Text style={styles.text}>Jarak sekitar {Math.ceil(assessment.distance)} m · akurasi ±{Math.ceil(position!.accuracy!)} m</Text>
-            <Text style={styles.meta}>Diperiksa {new Date(position!.timestamp).toLocaleTimeString('id-ID')}. Lokasi diambil ulang saat mengirim.</Text></View>
-        </View> : <Text style={styles.meta}>Belum ada lokasi valid. Aktifkan GPS/lokasi presisi lalu pilih Periksa lokasi.</Text>}
-        {locationError || assessmentError ? <Text accessibilityRole="alert" style={styles.error}>{locationError || assessmentError}</Text> : null}
-        <Action label={locating ? 'Mencari lokasi…' : 'Periksa lokasi'} icon="location-outline" disabled={busy || locating || !labState.lab}
-          loading={locating} onPress={() => void locate()} secondary />
-        {(locationError || assessmentError) && Platform.OS !== 'web' ? <Action label="Buka pengaturan perangkat" icon="settings-outline" secondary
-          onPress={() => { void Linking.openSettings().catch(() => setLocationError('Buka pengaturan perangkat secara manual untuk mengizinkan lokasi.')); }} /> : null}
-      </View>
-      <View style={styles.section}>
-        <Text accessibilityRole="header" style={styles.sectionTitle}>Catat kehadiran</Text>
-        <Text style={styles.meta}>Masuk sebagai {profile?.name}. Sesi harus dibuka, lokasi harus memenuhi radius, dan belum ada presensi atau izin.</Text>
-        {qr ? <Notice text="QR sesi berhasil dibaca. Kehadiran belum tersimpan; tekan Konfirmasi presensi QR untuk melanjutkan validasi lokasi." /> : null}
-        {qr ? <Action label="Hapus hasil QR" icon="close-outline" secondary disabled={busy} onPress={() => setQr(null)} /> : null}
-        {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-        <Action label={busy ? 'Memvalidasi dan menyimpan…' : qr ? 'Konfirmasi presensi QR' : 'Presensi sekarang'} icon="checkmark-circle-outline"
-          disabled={!canSubmit} loading={busy} onPress={() => setPhase('confirm')} />
-        <Action label={qr ? 'Pindai ulang QR sesi' : 'Pindai QR dari asisten'} icon="qr-code-outline" secondary
-          disabled={!available || busy || locating} onPress={() => { setError(null); setScanner(true); }} />
-        {!canSubmit && !busy ? <Text style={styles.meta}>Tombol aktif setelah data server siap, sesi dibuka, dan pemeriksaan lokasi memenuhi radius.</Text> : null}
-      </View>
-    </> : null}
-    <AttendanceConfirmationModal session={session} phase={phase} busy={busy} onClose={() => { if (!busy) setPhase('closed'); }}
-      onConfirm={() => void submit()} onViewHistory={() => { setPhase('closed'); router.push('/explore'); }} />
-    <Modal visible={scanner} animationType="slide" onRequestClose={() => setScanner(false)}>
-      <ScrollView contentContainerStyle={[styles.scanner, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}>
-        <View style={styles.inner}>
-          <Action label="Tutup pemindai" icon="close-outline" secondary onPress={() => setScanner(false)} />
-          <Text accessibilityRole="header" style={styles.sectionTitle}>Pindai QR sesi</Text>
-          {scanner ? <DeviceFeatureBoundary><Suspense fallback={<StateView kind="loading" title="Menyiapkan kamera" />}>
-            <QrScanner sessionId={session.id} onScanned={value => {
-              setScanner(false);
-              if (!session.qrToken || value.token !== session.qrToken) { setError('QR sudah tidak berlaku. Minta QR terbaru kepada asisten.'); return; }
-              setQr(value); setError(null);
-            }} />
-          </Suspense></DeviceFeatureBoundary> : null}
+  const sc = STATUS_COLOR[session.status] ?? STATUS_COLOR.upcoming;
+  const locationChip = assessment
+    ? assessment.inside
+      ? { text: `Di dalam radius · ${Math.ceil(assessment.distance)} m`, bg: '#E6F6EC', fg: '#166534' }
+      : { text: `Di luar radius · ${Math.ceil(assessment.distance)} m`, bg: '#FFF3D6', fg: '#92400E' }
+    : { text: 'Lokasi belum diperiksa', bg: '#EEF1F6', fg: '#64748B' };
+
+  return (
+    <View style={styles.details}>
+      <View style={styles.card}>
+        <View style={styles.sessionHead}>
+          <View style={styles.sessionIcon}>
+            <Ionicons name="calendar-outline" size={32} color={authColors.navy} />
+          </View>
+          <View style={styles.flex}>
+            <Text accessibilityRole="header" style={styles.courseName}>{session.courseName}</Text>
+            <Text style={styles.meta}>{session.className} · {session.room}</Text>
+            <View style={[styles.pill, styles.statusPill, { backgroundColor: sc.bg }]}>
+              <Text style={[styles.pillText, { color: sc.fg }]}>
+                {STATUS[session.status] ?? 'Tidak valid'}
+              </Text>
+            </View>
+          </View>
         </View>
-      </ScrollView>
-    </Modal>
-  </View>;
+        <View style={styles.divider} />
+        <View style={styles.infoRow}>
+          <Ionicons name="time-outline" size={22} color={authColors.navy} />
+          <Text style={styles.infoText}>{session.dateLabel}{'\n'}{session.timeRange}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.infoRow}>
+          <Ionicons name="person-outline" size={22} color={authColors.navy} />
+          <Text style={styles.infoText}>Asisten: {session.assistantName}</Text>
+        </View>
+      </View>
+
+      {attended ? (
+        <StateView
+          kind="empty"
+          title="Presensi sudah tercatat"
+          message="Kehadiranmu tersimpan. Kamu tidak dapat melakukan presensi dua kali pada sesi yang sama."
+          actionLabel="Lihat Riwayat"
+          onAction={() => router.push('/explore')}
+        />
+      ) : requested ? (
+        <StateView
+          kind="empty"
+          title="Izin sudah diajukan"
+          message="Presensi tidak dapat dicatat bersamaan dengan izin pada sesi yang sama. Periksa pengajuan di Riwayat."
+          actionLabel="Lihat status izin"
+          onAction={() => router.push('/explore')}
+        />
+      ) : null}
+      {loading ? <StateView kind="loading" title="Memeriksa catatan akun" /> : null}
+      {stateError ? <StateView kind="error" message={stateError} actionLabel="Coba lagi" onAction={retry} /> : null}
+      {cached ? <Notice text="Data masih dari cache. Sambungkan internet dan tunggu sinkronisasi server sebelum presensi." /> : null}
+
+      {!attended && !requested ? (
+        <>
+          {session.status !== 'open' ? (
+            <Notice text="Presensi hanya tersedia setelah asisten membuka sesi. Status tersimpan di server yang menentukan izin presensi." />
+          ) : null}
+
+          <View style={[styles.card, styles.labCard]}>
+            <View style={styles.infoRow}>
+              <Ionicons name="location-outline" size={20} color={authColors.navy} />
+              <Text accessibilityRole="header" style={styles.cardTitleInline}>Lokasi Laboratorium</Text>
+            </View>
+
+            {labState.loading ? (
+              <StateView kind="loading" title="Memuat laboratorium" />
+            ) : labState.error ? (
+              <StateView kind="error" message={labState.error} actionLabel="Muat ulang lab" onAction={labState.retry} />
+            ) : labState.lab ? (
+              <View style={styles.labRow}>
+                <View style={styles.flex}>
+                  <Text style={styles.labName}>{labState.lab.name}</Text>
+                  <Text style={styles.meta}>Radius presensi {radius} meter</Text>
+                  <View style={[styles.pill, styles.locationChip, { backgroundColor: locationChip.bg }]}>
+                    <Text style={[styles.pillText, { color: locationChip.fg }]}>{locationChip.text}</Text>
+                  </View>
+                </View>
+                <MapPreview inside={assessment?.inside} />
+              </View>
+            ) : null}
+
+            {assessment ? (
+              <View
+                accessibilityLiveRegion="polite"
+                style={[styles.locationResult, !assessment.inside && styles.locationOutside]}
+              >
+                <Ionicons
+                  name={assessment.inside ? 'checkmark-circle-outline' : 'location-outline'}
+                  size={22}
+                  color={assessment.inside ? '#166534' : '#92400E'}
+                />
+                <View style={styles.flex}>
+                  <Text style={styles.resultTitle}>{assessment.inside ? 'Di dalam radius lab' : 'Di luar radius lab'}</Text>
+                  <Text style={styles.text}>
+                    Jarak sekitar {Math.ceil(assessment.distance)} m · akurasi ±{Math.ceil(position!.accuracy!)} m
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+            {locationError || assessmentError ? (
+              <Text accessibilityRole="alert" style={styles.error}>{locationError || assessmentError}</Text>
+            ) : null}
+            <Action
+              label={locating ? 'Mencari lokasi…' : 'Periksa lokasi'}
+              icon="location-outline"
+              disabled={busy || locating || !labState.lab}
+              loading={locating}
+              onPress={() => void locate()}
+              secondary
+            />
+            {(locationError || assessmentError) && Platform.OS !== 'web' ? (
+              <Action
+                label="Buka pengaturan perangkat"
+                icon="settings-outline"
+                secondary
+                onPress={() => {
+                  void Linking.openSettings().catch(() =>
+                    setLocationError('Buka pengaturan perangkat secara manual untuk mengizinkan lokasi.'),
+                  );
+                }}
+              />
+            ) : null}
+          </View>
+
+          <View style={styles.actions}>
+            {qr ? (
+              <Notice text="QR sesi berhasil dibaca. Kehadiran belum tersimpan; tekan Konfirmasi presensi QR untuk melanjutkan validasi lokasi." />
+            ) : null}
+            {qr ? (
+              <Action label="Hapus hasil QR" icon="close-outline" secondary disabled={busy} onPress={() => setQr(null)} />
+            ) : null}
+            {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+            <Action
+              label={busy ? 'Memvalidasi dan menyimpan…' : qr ? 'Konfirmasi presensi QR' : 'Presensi sekarang'}
+              icon="checkmark-circle-outline"
+              disabled={!canSubmit}
+              loading={busy}
+              onPress={() => setPhase('confirm')}
+            />
+            <Action
+              label={qr ? 'Pindai ulang QR sesi' : 'Pindai QR dari asisten'}
+              icon="qr-code-outline"
+              secondary
+              disabled={!available || busy || locating}
+              onPress={() => { setError(null); setScanner(true); }}
+            />
+          </View>
+        </>
+      ) : null}
+
+      <AttendanceConfirmationModal
+        session={session}
+        phase={phase}
+        busy={busy}
+        onClose={() => { if (!busy) setPhase('closed'); }}
+        onConfirm={() => void submit()}
+        onViewHistory={() => { setPhase('closed'); router.push('/explore'); }}
+      />
+      <Modal visible={scanner} animationType="slide" onRequestClose={() => setScanner(false)}>
+        <ScrollView
+          contentContainerStyle={[styles.scanner, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}
+        >
+          <View style={styles.inner}>
+            <Action label="Tutup pemindai" icon="close-outline" secondary onPress={() => setScanner(false)} />
+            <Text accessibilityRole="header" style={styles.cardTitle}>Pindai QR sesi</Text>
+            {scanner ? (
+              <DeviceFeatureBoundary>
+                <Suspense fallback={<StateView kind="loading" title="Menyiapkan kamera" />}>
+                  <QrScanner
+                    sessionId={session.id}
+                    onScanned={(value) => {
+                      setScanner(false);
+                      if (!session.qrToken || value.token !== session.qrToken) {
+                        setError('QR sudah tidak berlaku. Minta QR terbaru kepada asisten.');
+                        return;
+                      }
+                      setQr(value);
+                      setError(null);
+                    }}
+                  />
+                </Suspense>
+              </DeviceFeatureBoundary>
+            ) : null}
+          </View>
+        </ScrollView>
+      </Modal>
+    </View>
+  );
+}
+
+// Ilustrasi peta dekoratif (bukan peta sungguhan).
+function MapPreview({ inside }: { inside?: boolean }) {
+  return (
+    <View style={styles.map} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={styles.mapGreen} />
+      <View style={[styles.mapRoad, { top: 19, transform: [{ rotate: '-24deg' }] }]} />
+      <View style={[styles.mapRoad, { top: 43, transform: [{ rotate: '18deg' }] }]} />
+      <Ionicons
+        name="location"
+        size={26}
+        color={inside === false ? '#B45309' : authColors.navy}
+        style={styles.mapPin}
+      />
+    </View>
+  );
 }
 
 function Notice({ text }: { text: string }) {
-  return <View style={styles.notice}><Ionicons name="information-circle-outline" size={22} color={authColors.navy} />
-    <Text style={[styles.text, styles.flex]}>{text}</Text></View>;
+  return (
+    <View style={styles.notice}>
+      <Ionicons name="information-circle-outline" size={22} color={authColors.navy} />
+      <Text style={[styles.text, styles.flex]}>{text}</Text>
+    </View>
+  );
 }
 
 function Action({ label, icon, onPress, disabled, loading, secondary }: {
   label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void; disabled?: boolean; loading?: boolean; secondary?: boolean;
 }) {
   const color = secondary ? authColors.navy : authColors.white;
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled, busy: !!loading }}
-    disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.action, secondary && styles.secondary, disabled && styles.disabled, pressed && styles.pressed]}>
-    {loading ? <ActivityIndicator color={color} /> : <Ionicons name={icon} size={21} color={color} />}
-    <Text style={[styles.actionText, { color }]}>{label}</Text>
-  </Pressable>;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled, busy: !!loading }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.action, secondary && styles.secondary, disabled && styles.disabled, pressed && styles.pressed]}
+    >
+      {loading ? <ActivityIndicator color={color} /> : <Ionicons name={icon} size={21} color={color} />}
+      <Text style={[styles.actionText, { color }]}>{label}</Text>
+    </Pressable>
+  );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: authColors.background }, flex: { flex: 1 }, inner: { width: '100%', maxWidth: 600, alignSelf: 'center' },
-  header: { paddingHorizontal: 20, paddingBottom: 28, backgroundColor: authColors.navy }, title: { color: authColors.white, fontSize: 30, fontWeight: '800', marginTop: 12 },
-  subtitle: { color: '#D4DEEF', fontSize: 15, lineHeight: 23, marginTop: 8 }, back: { marginBottom: 8 },
-  body: { padding: 20, gap: 12 }, details: { gap: 18, marginTop: 12 },
-  section: { padding: 18, backgroundColor: authColors.white, borderRadius: 14, gap: 12 }, sectionTitle: { color: authColors.navy, fontSize: 21, lineHeight: 28, fontWeight: '800', marginBottom: 4 },
-  sessionOption: { padding: 14, minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: authColors.white, borderWidth: 1, borderColor: authColors.border, borderRadius: 12 },
-  selectedOption: { borderColor: authColors.navy, backgroundColor: '#EAF0FA' }, optionTitle: { color: authColors.navy, fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  text: { color: authColors.ink, fontSize: 15, lineHeight: 23 }, meta: { color: '#52627A', fontSize: 14, lineHeight: 21 }, status: { color: authColors.navy, fontSize: 13, lineHeight: 20, fontWeight: '700', flexShrink: 1 },
-  action: { minHeight: 50, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: authColors.navy, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  actionText: { fontSize: 15, lineHeight: 22, fontWeight: '700', flexShrink: 1, textAlign: 'center' }, secondary: { backgroundColor: '#E8EDF7' }, disabled: { opacity: 0.45 }, pressed: { opacity: 0.75 },
-  notice: { padding: 14, backgroundColor: '#E8EDF7', borderRadius: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  screen: { flex: 1, backgroundColor: authColors.background },
+  flex: { flex: 1 },
+  inner: { width: '100%', maxWidth: 600, alignSelf: 'center' },
+
+  header: {
+    paddingHorizontal: 20,
+    paddingBottom: 64,
+    backgroundColor: authColors.navy,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerSpacer: { width: 44 },
+  title: { flex: 1, color: authColors.white, fontSize: 20, fontWeight: '800', textAlign: 'center' },
+
+  body: { paddingHorizontal: 20, marginTop: -40, gap: 14 },
+  details: { gap: 14 },
+
+  card: {
+    padding: 18,
+    backgroundColor: authColors.white,
+    borderRadius: 22,
+    gap: 12,
+    shadowColor: '#1B2A4E',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  // Kartu Lokasi Laboratorium dibuat lebih ringkas
+  labCard: { padding: 14, gap: 10, borderRadius: 18 },
+  cardTitle: { color: authColors.navy, fontSize: 20, lineHeight: 28, fontWeight: '800' },
+  cardTitleInline: { color: authColors.navy, fontSize: 15, fontWeight: '800' },
+
+  sessionHead: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  sessionIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 18,
+    backgroundColor: '#E3E9F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  courseName: { color: authColors.navy, fontSize: 19, lineHeight: 26, fontWeight: '800' },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: authColors.border },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  infoText: { flex: 1, color: authColors.ink, fontSize: 15, lineHeight: 23 },
+
+  pill: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  pillText: { fontSize: 11, fontWeight: '800' },
+  statusPill: { marginTop: 6 },
+  locationChip: { marginTop: 6 },
+
+  labRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  labName: { color: authColors.navy, fontSize: 16, fontWeight: '800', marginBottom: 2 },
+
+  map: {
+    width: 88,
+    height: 68,
+    borderRadius: 14,
+    backgroundColor: '#E8EDF7',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapGreen: {
+    position: 'absolute',
+    right: -10,
+    top: -10,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#CFEBD8',
+  },
+  mapRoad: { position: 'absolute', left: -16, width: 130, height: 7, backgroundColor: '#F8FAFD' },
+  mapPin: { marginTop: -4 },
+
+  sessionOption: {
+    padding: 14,
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: authColors.white,
+    borderWidth: 1,
+    borderColor: authColors.border,
+    borderRadius: 14,
+  },
+  selectedOption: { borderColor: authColors.navy, backgroundColor: '#EAF0FA' },
+  optionTitle: { color: authColors.navy, fontSize: 16, fontWeight: '700', marginBottom: 4 },
+
+  text: { color: authColors.ink, fontSize: 15, lineHeight: 23 },
+  meta: { color: '#52627A', fontSize: 14, lineHeight: 21 },
+
+  actions: { gap: 12 },
+  action: {
+    minHeight: 54,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: authColors.navy,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  actionText: { fontSize: 15, lineHeight: 22, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
+  secondary: { backgroundColor: '#E8EDF7' },
+  disabled: { opacity: 0.45 },
+  pressed: { opacity: 0.75 },
+
+  notice: { padding: 14, backgroundColor: '#E8EDF7', borderRadius: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   error: { color: '#991B1B', backgroundColor: '#FEF2F2', borderRadius: 10, padding: 12, fontSize: 14, lineHeight: 22 },
-  locationResult: { padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#E6F6EC' },
-  locationOutside: { backgroundColor: '#FFF3D6' }, resultTitle: { color: authColors.navy, fontSize: 16, lineHeight: 24, fontWeight: '800' },
+  locationResult: { padding: 12, borderRadius: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#E6F6EC' },
+  locationOutside: { backgroundColor: '#FFF3D6' },
+  resultTitle: { color: authColors.navy, fontSize: 15, lineHeight: 22, fontWeight: '800' },
+
+  changeLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 44,
+    marginTop: 4,
+  },
+  changeLinkText: { color: authColors.navy, fontSize: 14, fontWeight: '700' },
+
   scanner: { padding: 20, flexGrow: 1, backgroundColor: authColors.background },
 });
