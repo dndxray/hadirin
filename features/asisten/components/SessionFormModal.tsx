@@ -14,7 +14,12 @@ import {
 import { Timestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 
+<<<<<<< Updated upstream
 import { theme } from '../theme';
+=======
+import { ClassData, subscribeClasses } from '../../../src/lib/classes';
+import { useLabs } from '../../../src/hooks/use-labs';
+>>>>>>> Stashed changes
 import {
   resolveParticipantUids,
   type ClassParticipant,
@@ -37,6 +42,11 @@ const MONTH_NAMES = [
 
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
+<<<<<<< Updated upstream
+=======
+const MAX_RADIUS = 1000;
+
+>>>>>>> Stashed changes
 const TIME_OPTIONS: string[] = [];
 for (let h = 7; h <= 20; h++) {
   TIME_OPTIONS.push(`${h.toString().padStart(2, '0')}:00`);
@@ -64,12 +74,17 @@ export function SessionFormModal({
   onSubmit,
 }: SessionFormModalProps) {
   const [classes, setClasses] = useState<ClassData[]>([]);
+  const { labs, status: labsStatus } = useLabs();
 
   const [courseName, setCourseName] = useState('');
   const [courseCode, setCourseCode] = useState('');
   const [classId, setClassId] = useState('');
   const [className, setClassName] = useState('');
   const [room, setRoom] = useState('');
+<<<<<<< Updated upstream
+=======
+  const [labId, setLabId] = useState('');
+>>>>>>> Stashed changes
   const [description, setDescription] = useState('');
   const [participantIds, setParticipantIds] = useState<string[]>([]);
 
@@ -106,6 +121,10 @@ export function SessionFormModal({
     setClassId(initialData?.classId || '');
     setClassName(initialData?.className || '');
     setRoom(initialData?.room || '');
+<<<<<<< Updated upstream
+=======
+    setLabId(initialData?.labId || '');
+>>>>>>> Stashed changes
     setDescription(initialData?.description || '');
     setParticipantIds(initialData?.participantIds || []);
     setMapping(null);
@@ -145,6 +164,14 @@ export function SessionFormModal({
     .filter((cls) => !courseName || !cls.course || cls.course.toLowerCase() === courseName.toLowerCase())
     .sort((a, b) => a.name.localeCompare(b.name));
 
+<<<<<<< Updated upstream
+=======
+  const selectedLab = labs.find((l) => l.id === labId);
+  // Ruangan yang disimpan: nama lab terpilih; untuk sesi lama yang belum
+  // punya lab, pakai ruangan yang sudah ada sampai lab dipilih.
+  const roomValue = selectedLab?.name ?? room;
+
+>>>>>>> Stashed changes
   const handleSelectCourse = (course: string) => {
     setCourseName(course);
     const available = classes.filter((c) => c.course === course);
@@ -241,7 +268,16 @@ export function SessionFormModal({
   const handleSave = async () => {
     if (!courseName.trim()) return setError('Pilih Mata Kuliah terlebih dahulu.');
     if (!className.trim()) return setError('Pilih Kelas Praktikum terlebih dahulu.');
+<<<<<<< Updated upstream
     if (!room.trim()) return setError('Ruangan praktikum wajib diisi.');
+=======
+    if (!labId || !selectedLab) return setError('Pilih Laboratorium (ruangan dan lokasi presensi).');
+
+    const radiusValue = selectedLab.radiusMeters;
+    if (!Number.isFinite(radiusValue) || radiusValue < 1 || radiusValue > MAX_RADIUS) {
+      return setError(`Radius laboratorium harus antara 1 dan ${MAX_RADIUS} meter.`);
+    }
+>>>>>>> Stashed changes
     
     const today = getGMT7Date();
     today.setHours(0, 0, 0, 0);
@@ -316,6 +352,19 @@ export function SessionFormModal({
         value: c.name,
         onPress: () => void handleSelectClass(c)
       }));
+<<<<<<< Updated upstream
+=======
+    } else if (activePicker === 'lab') {
+      title = 'Pilih Laboratorium';
+      options = labs.map(l => ({
+        label: l.name,
+        value: l.id,
+        onPress: () => {
+          setLabId(l.id);
+          setRoom(l.name);
+        }
+      }));
+>>>>>>> Stashed changes
     } else if (activePicker === 'start') {
       title = 'Jam Mulai';
       options = availableStartTimes.map(t => ({
@@ -345,7 +394,13 @@ export function SessionFormModal({
             <Text style={styles.modalTitle}>{title}</Text>
             <ScrollView style={{ maxHeight: 300 }}>
               {options.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: '#64748B', marginTop: 20 }}>Tidak ada pilihan tersedia.</Text>
+                <Text style={{ textAlign: 'center', color: '#64748B', marginTop: 20 }}>
+                  {activePicker === 'lab'
+                    ? labsStatus === 'loading'
+                      ? 'Memuat daftar laboratorium...'
+                      : 'Daftar laboratorium belum tersedia. Periksa koneksi atau tambahkan lab.'
+                    : 'Tidak ada pilihan tersedia.'}
+                </Text>
               ) : (
                 options.map((opt, idx) => (
                   <Pressable
@@ -418,6 +473,7 @@ export function SessionFormModal({
               )}
             </View>
 
+<<<<<<< Updated upstream
             <View style={styles.row}>
               <View style={[styles.fieldGroup, { flex: 1 }]}>
                 <Text style={styles.label}>Kode Matkul</Text>
@@ -427,6 +483,47 @@ export function SessionFormModal({
                 <Text style={styles.label}>Ruangan</Text>
                 <TextInput style={styles.inputDisabled} value={room} editable={false} placeholder="Otomatis" />
               </View>
+=======
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Kode Matkul</Text>
+              <TextInput
+                style={styles.inputDisabled}
+                value={courseCode}
+                editable={false}
+                placeholder="Otomatis"
+                placeholderTextColor="#94A3B8"
+              />
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Laboratorium (Ruangan dan Lokasi Presensi)</Text>
+              <Pressable style={styles.dropdownInput} onPress={() => setActivePicker('lab')}>
+                <Text style={[styles.dropdownInputText, !selectedLab && { color: '#94A3B8' }]}>
+                  {selectedLab?.name || (room ? `${room} (pilih lab untuk memperbarui)` : 'Pilih Laboratorium')}
+                </Text>
+                <Ionicons name="location-outline" size={18} color="#64748B" />
+              </Pressable>
+              <Text style={styles.hintText}>
+                Ruangan sesi otomatis mengikuti laboratorium yang dipilih.
+              </Text>
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Radius Presensi (dari Lab)</Text>
+              <View style={styles.radiusRow}>
+                <TextInput
+                  style={styles.radiusInput}
+                  value={selectedLab ? String(selectedLab.radiusMeters) : ''}
+                  placeholder="Pilih laboratorium dulu"
+                  placeholderTextColor="#94A3B8"
+                  editable={false}
+                />
+                <Text style={styles.radiusUnit}>meter</Text>
+              </View>
+              <Text style={styles.hintText}>
+                Otomatis mengikuti radius laboratorium yang dipilih. Ubah radius lab di halaman Peta Laboratorium.
+              </Text>
+>>>>>>> Stashed changes
             </View>
 
             <View style={styles.fieldGroup}>
