@@ -12,7 +12,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AuthButton, AuthError, AuthField, authColors } from '@/components/auth-ui';
-import { NotificationSettings } from '@/components/notification-settings';
+import { EditProfileModal } from '@/components/edit-profile-modal';
+import { ProfileAvatar } from '@/components/profile-avatar';
 import { StateView } from '@/components/state-view';
 import { BottomTabInset } from '@/constants/theme';
 import { useApp } from '@/context/app-context';
@@ -26,14 +27,14 @@ type IconName = keyof typeof Ionicons.glyphMap;
 export default function ProfilScreen() {
   const insets = useSafeAreaInsets();
   const { currentUser } = useApp();
-  const { profile, saveNim, logout } = useAuth();
+  const { profile, saveNim, logout, updateProfile, updateAccount } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nim, setNim] = useState('');
   const [savingNim, setSavingNim] = useState(false);
   const [nimError, setNimError] = useState<string | null>(null);
   const [editingNim, setEditingNim] = useState(false);
-  const [showNotif, setShowNotif] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
 
   const handleSaveNim = async () => {
     const invalid = validateNim(nim);
@@ -90,7 +91,8 @@ export default function ProfilScreen() {
   const rolesText = (profile?.roles?.length ? profile.roles : ['praktikan' as const])
     .map((item) => roleLabel(item))
     .join(' · ');
-  const initial = currentUser.name?.charAt(0).toUpperCase() || '?';
+  const displayName = profile?.name || currentUser.name;
+  const displayEmail = profile?.email || currentUser.identifier;
   const needNimForm = isPraktikanAccount && (!profile?.nim || editingNim);
 
   return (
@@ -102,20 +104,47 @@ export default function ProfilScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
+          <View style={styles.headerCircleA} />
+          <View style={styles.headerCircleB} />
           <View style={styles.headerInner}>
             <Text accessibilityRole="header" style={styles.title}>Profil</Text>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initial}</Text>
-            </View>
-            <Text style={styles.name}>{currentUser.name}</Text>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Ubah avatar"
+              onPress={() => setEditingProfile(true)}
+              style={styles.avatarWrap}
+            >
+              <ProfileAvatar
+                avatarId={profile?.avatarId}
+                color={profile?.avatarColor}
+                name={displayName}
+                size={92}
+              />
+              <View style={styles.pencil}>
+                <Ionicons name="pencil" size={13} color={authColors.white} />
+              </View>
+            </Pressable>
+
+            <Text style={styles.name}>{displayName}</Text>
             <Text style={styles.role}>{activeRoleLabel}</Text>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit profil"
+              onPress={() => setEditingProfile(true)}
+              style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.8 }]}
+            >
+              <Ionicons name="create-outline" size={16} color={authColors.white} />
+              <Text style={styles.editBtnText}>Edit Profil</Text>
+            </Pressable>
           </View>
         </View>
 
         <View style={styles.body}>
           <View style={styles.bodyInner}>
             <View style={styles.card}>
-              <InfoRow icon="mail-outline" label="Email" value={currentUser.identifier} />
+              <InfoRow icon="mail-outline" label="Email" value={displayEmail} />
               {isPraktikanAccount ? (
                 <>
                   <View style={styles.divider} />
@@ -176,20 +205,6 @@ export default function ProfilScreen() {
               </View>
             ) : null}
 
-            <View style={styles.card}>
-              <MenuRow
-                icon="notifications-outline"
-                label="Notifikasi"
-                chevron={showNotif ? 'chevron-up' : 'chevron-down'}
-                onPress={() => setShowNotif((v) => !v)}
-              />
-              {showNotif ? (
-                <View style={styles.notifBox}>
-                  <NotificationSettings />
-                </View>
-              ) : null}
-            </View>
-
             <AuthError message={error} />
 
             <Pressable
@@ -210,6 +225,34 @@ export default function ProfilScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <EditProfileModal
+        visible={editingProfile}
+        showNim={isPraktikanAccount}
+        initial={{
+          name: displayName,
+          email: displayEmail,
+          nim: profile?.nim,
+          avatarId: profile?.avatarId,
+          avatarColor: profile?.avatarColor,
+        }}
+        onClose={() => setEditingProfile(false)}
+        onSave={async (patch) => {
+          const { nim: newNim, email, newPassword, currentPassword, ...base } = patch;
+          try {
+            // 1. Email/password dulu (butuh kata sandi saat ini, paling mungkin gagal)
+            if (email || newPassword) {
+              await updateAccount({ email, newPassword, currentPassword: currentPassword ?? '' });
+            }
+            // 2. Nama + avatar
+            await updateProfile(base);
+            // 3. NIM
+            if (newNim) await saveNim(newNim);
+          } catch (failure) {
+            throw new Error(firebaseErrorMessage(failure));
+          }
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -243,32 +286,6 @@ function InfoRow({
   );
 }
 
-function MenuRow({
-  icon,
-  label,
-  onPress,
-  chevron = 'chevron-forward',
-}: {
-  icon: IconName;
-  label: string;
-  onPress: () => void;
-  chevron?: IconName;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
-    >
-      <View style={styles.rowIcon}>
-        <Ionicons name={icon} size={18} color={authColors.navy} />
-      </View>
-      <Text style={styles.menuLabel}>{label}</Text>
-      <Ionicons name={chevron} size={18} color={authColors.muted} />
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: authColors.background },
   center: { alignItems: 'center', paddingHorizontal: 20 },
@@ -281,20 +298,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 56,
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  headerCircleA: {
+    position: 'absolute',
+    top: -60,
+    right: -40,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(96,165,250,0.18)',
+  },
+  headerCircleB: {
+    position: 'absolute',
+    bottom: -70,
+    left: -50,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   headerInner: { width: '100%', maxWidth: 560, alignItems: 'center', gap: 8 },
   title: { color: authColors.white, fontSize: 22, fontWeight: '800', marginBottom: 8 },
-  avatar: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: '#F6D9C9',
+  avatarWrap: { position: 'relative' },
+  pencil: {
+    position: 'absolute',
+    right: 0,
+    bottom: 2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#2F5AA8',
+    borderWidth: 2,
+    borderColor: authColors.navy,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: '#8B4A2B', fontSize: 34, fontWeight: '800' },
   name: { color: authColors.white, fontSize: 20, fontWeight: '800', textAlign: 'center' },
   role: { color: '#B6C2DB', fontSize: 13 },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    minHeight: 40,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  editBtnText: { color: authColors.white, fontSize: 13, fontWeight: '700' },
 
   body: { alignItems: 'center', paddingHorizontal: 20, marginTop: -28 },
   bodyInner: { width: '100%', maxWidth: 560, gap: 14 },
@@ -322,9 +374,7 @@ const styles = StyleSheet.create({
   rowLabel: { color: authColors.muted, fontSize: 12 },
   rowValue: { color: authColors.ink, fontSize: 15, fontWeight: '700', marginTop: 1 },
   rowAction: { color: '#2F5AA8', fontSize: 13, fontWeight: '700' },
-  menuLabel: { flex: 1, color: authColors.ink, fontSize: 15, fontWeight: '700' },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: authColors.border },
-  notifBox: { paddingBottom: 12 },
 
   nimForm: { backgroundColor: authColors.white, borderRadius: 20, padding: 20, gap: 14 },
   nimTitle: { color: authColors.navy, fontSize: 18, fontWeight: '800' },

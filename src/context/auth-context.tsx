@@ -2,9 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createUserWithEmailAndPassword,
   deleteUser,
+  EmailAuthProvider,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   signInWithEmailAndPassword,
   signOut,
+  updatePassword,
+  verifyBeforeUpdateEmail,
   type User,
 } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
@@ -20,9 +24,9 @@ import {
 } from 'react';
 
 import { auth, db } from '@/lib/firebase';
-import type { Role } from '@/types/attendance';
 import { saveOwnNim } from '@/services/enrollment-service';
 import { unregisterPushTokenForCurrentUser } from '@/services/push-registration';
+import type { Role } from '@/types/attendance';
 import { normalizeNim, validateNim } from '@/utils/nim';
 import { roleList } from '@/utils/roles';
 
@@ -36,6 +40,16 @@ export type Profile = {
   roles: Role[];
   nim?: string;
   approvalStatus?: 'pending' | 'approved';
+  avatarId?: string;
+  avatarColor?: string;
+};
+
+export type ProfileUpdate = { name: string; avatarId: string; avatarColor: string };
+
+export type AccountUpdate = {
+  email?: string;
+  newPassword?: string;
+  currentPassword: string;
 };
 
 type AuthContextValue = {
@@ -44,6 +58,8 @@ type AuthContextValue = {
   loading: boolean;
   register: (name: string, email: string, password: string, role: Role, nim?: string) => Promise<Profile>;
   saveNim: (nim: string) => Promise<void>;
+  updateProfile: (patch: ProfileUpdate) => Promise<void>;
+  updateAccount: (input: AccountUpdate) => Promise<void>;
   login: (email: string, password: string, role: Role) => Promise<Profile>;
   logout: () => Promise<void>;
 };
@@ -70,6 +86,8 @@ async function fetchProfile(uid: string): Promise<Profile | null> {
     roles,
     ...(typeof data.nim === 'string' ? { nim: data.nim } : {}),
     ...(approvalStatus ? { approvalStatus } : {}),
+    ...(typeof data.avatarId === 'string' ? { avatarId: data.avatarId } : {}),
+    ...(typeof data.avatarColor === 'string' ? { avatarColor: data.avatarColor } : {}),
   };
 }
 
@@ -164,6 +182,8 @@ export function authErrorMessage(error: unknown): string {
     case 'auth/wrong-password':
     case 'auth/user-not-found':
       return 'Email atau kata sandi salah.';
+    case 'auth/requires-recent-login':
+      return 'Sesi terlalu lama. Keluar lalu masuk kembali, kemudian coba lagi.';
     case 'auth/too-many-requests':
       return 'Terlalu banyak percobaan. Coba lagi nanti.';
     case 'auth/network-request-failed':
@@ -193,6 +213,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       try {
         const next = await fetchProfile(user.uid);
+
+        // Email di Auth bisa berubah setelah user klik link verifikasi.
+        // Sinkronkan ke dokumen profil.
+        if (next && user.email && next.email !== user.email) {
+          await updateDoc(doc(db, 'users', user.uid), { email: user.email }).catch(() => {});
+          next.email = user.email;
+        }
+
         setProfile(next ? await withActiveRole(next) : null);
       } catch {
         setProfile(null);
@@ -291,9 +319,42 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setProfile((current) => (current && current.uid === uid ? { ...current, nim } : current));
   }, []);
 
+  const updateProfile = useCallback(async (patch: ProfileUpdate) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error('Sesi login berakhir. Masuk kembali.');
+    await updateDoc(doc(db, 'users', uid), patch);
+    setProfile((current) => (current && current.uid === uid ? { ...current, ...patch } : current));
+  }, []);
+
+  const updateAccount = useCallback(async (input: AccountUpdate) => {
+    const user = auth.currentUser;
+    if (!user?.email) throw new Error('Sesi login berakhir. Masuk kembali.');
+
+    // Firebase mewajibkan login ulang untuk mengubah email/password
+    const credential = EmailAuthProvider.credential(user.email, input.currentPassword);
+    await reauthenticateWithCredential(user, credential);
+
+    if (input.email && input.email.toLowerCase() !== user.email.toLowerCase()) {
+      await verifyBeforeUpdateEmail(user, input.email);
+    }
+    if (input.newPassword) {
+      await updatePassword(user, input.newPassword);
+    }
+  }, []);
+
   const value = useMemo(
-    () => ({ firebaseUser, profile, loading, register, login, logout, saveNim }),
-    [firebaseUser, profile, loading, register, login, logout, saveNim],
+    () => ({
+      firebaseUser,
+      profile,
+      loading,
+      register,
+      login,
+      logout,
+      saveNim,
+      updateProfile,
+      updateAccount,
+    }),
+    [firebaseUser, profile, loading, register, login, logout, saveNim, updateProfile, updateAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
