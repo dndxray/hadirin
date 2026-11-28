@@ -30,6 +30,11 @@ export async function saveOwnNim(value: string): Promise<string> {
     if (!snapshot.exists() || !hasRole(snapshot.data(), 'praktikan')) throw new Error('Profil praktikan tidak ditemukan.');
     const existing = snapshot.data().nim;
     if (existing === nim) return nim;
+    // Security Rules mengunci NIM yang sudah terisi. Cek di sini supaya pesannya
+    // jelas, bukan permission-denied.
+    if (typeof existing === 'string' && existing.trim()) {
+      throw new Error('NIM sudah tersimpan dan tidak dapat diubah sendiri. Hubungi asisten atau pengelola jika NIM salah.');
+    }
     transaction.update(ref, { nim });
     return nim;
   });
