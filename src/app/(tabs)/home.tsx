@@ -1,6 +1,7 @@
 import { AsistenHome } from '@/components/asisten-home';
 import { authColors } from '@/components/auth-ui';
 import { HomeIllustration } from '@/components/home-illustration';
+import { NotificationBell } from '@/components/notification-bell';
 import { QuickIllustration, type QuickKind } from '@/components/quick-menu-illustrations';
 import { SessionCard } from '@/components/session-card';
 import { useAuth } from '@/context/auth-context';
@@ -159,8 +160,13 @@ export default function HomeScreen() {
                 Hai, {firstName}
               </Text>
             </View>
-            <HomeIllustration />
+            <View style={styles.illustration}>
+              <HomeIllustration />
+            </View>
           </View>
+          <NotificationBell
+            style={{ position: 'absolute', right: 20, top: insets.top + 12, zIndex: 10 }}
+          />
         </View>
 
         {/* Pencarian (menimpa tepi bawah header) */}
@@ -280,6 +286,7 @@ const styles = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerText: { flex: 1, paddingRight: 8 },
+  illustration: { transform: [{ translateX: -18 }, { translateY: 12 }] },
   greeting: { color: '#CBD5E1', fontSize: 15, marginBottom: 4 },
   name: { color: '#FFFFFF', fontSize: 32, fontWeight: '800' },
 
