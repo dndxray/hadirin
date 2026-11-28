@@ -100,6 +100,27 @@ service cloud.firestore {
       return isPraktikan() && request.auth.uid in sessionData(id).participantIds;
     }
 
+    function hasWindow(s) {
+      return s.keys().hasAll(['opensAt', 'closesAt']);
+    }
+
+    // Sesi boleh dipakai presensi:
+    // - tidak ditutup manual oleh asisten, dan
+    // - request.time ada di antara jam mulai dan jam selesai.
+    // Sesi lama yang belum punya opensAt/closesAt memakai field status.
+    function sessionLive(s) {
+      return s.get('status', '') != 'closed'
+        && (hasWindow(s)
+          ? (request.time >= s.opensAt && request.time <= s.closesAt)
+          : s.get('status', '') == 'open');
+    }
+
+    // Izin boleh diajukan selama sesi belum selesai dan belum ditutup.
+    function sessionAcceptsPermission(s) {
+      return s.get('status', '') in ['open', 'upcoming']
+        && (!hasWindow(s) || request.time <= s.closesAt);
+    }
+
     function validSummary(data) {
       let s = sessionData(data.sessionId);
       return data.session == {
@@ -146,7 +167,7 @@ service cloud.firestore {
         && request.resource.data.practitionerId == request.auth.uid
         && id == request.resource.data.sessionId + '_' + request.auth.uid
         && participant(request.resource.data.sessionId)
-        && sessionData(request.resource.data.sessionId).status == 'open'
+        && sessionLive(sessionData(request.resource.data.sessionId))
         && request.resource.data.checkedInAt == request.time
         && validSummary(request.resource.data)
         && validAttendanceLocation(request.resource.data)
@@ -167,7 +188,7 @@ service cloud.firestore {
         && request.resource.data.practitionerId == request.auth.uid
         && id == request.resource.data.sessionId + '_' + request.auth.uid
         && participant(request.resource.data.sessionId)
-        && sessionData(request.resource.data.sessionId).status in ['open', 'upcoming']
+        && sessionAcceptsPermission(sessionData(request.resource.data.sessionId))
         && request.resource.data.reason is string
         && request.resource.data.reason.trim().size() >= 10 && request.resource.data.reason.size() <= 1000
         && request.resource.data.status == 'pending'

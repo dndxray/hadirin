@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View
@@ -15,12 +16,12 @@ import {
 
 import { useLabs } from '../../../src/hooks/use-labs';
 import { ClassData, subscribeClasses } from '../../../src/lib/classes';
-import { MAX_LAB_RADIUS_METERS } from '../../../src/utils/attendance-location';
 import {
   resolveParticipantUids,
   type ClassParticipant,
   type SessionInput,
 } from '../../../src/services/assistant-service';
+import { MAX_LAB_RADIUS_METERS } from '../../../src/utils/attendance-location';
 import { theme } from '../theme';
 
 
@@ -38,6 +39,12 @@ const MONTH_NAMES = [
 ];
 
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+const FULL_DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+// Batas pengulangan mingguan (kira-kira satu semester)
+const MIN_REPEAT = 2;
+const MAX_REPEAT = 16;
+const DEFAULT_REPEAT = '4';
 
 const TIME_OPTIONS: string[] = [];
 for (let h = 7; h <= 20; h++) {
@@ -48,8 +55,15 @@ for (let h = 7; h <= 20; h++) {
 }
 
 function formatIndonesianDate(d: Date): string {
-  const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-  return `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+  return `${FULL_DAY_NAMES[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function formatShortDate(d: Date): string {
+  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()].slice(0, 3)} ${d.getFullYear()}`;
+}
+
+function addDays(base: Date, days: number): Date {
+  return new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
 }
 
 function getGMT7Date(): Date {
@@ -85,6 +99,10 @@ export function SessionFormModal({
   
   const [startTime, setStartTime] = useState('13:00');
   const [endTime, setEndTime] = useState('15:00');
+
+  // Pengulangan mingguan (hanya mode create)
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatCount, setRepeatCount] = useState(DEFAULT_REPEAT);
   
   const [activePicker, setActivePicker] = useState<'course' | 'class' | 'lab' | 'start' | 'end' | null>(null);
 
@@ -96,7 +114,11 @@ export function SessionFormModal({
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const mappingRequest = useRef(0);
+  // Jumlah sesi yang sudah tersimpan di percobaan ini, supaya simpan ulang
+  // setelah gagal di tengah jalan tidak membuat sesi ganda.
+  const savedCount = useRef(0);
 
   useEffect(() => {
     const unsubClasses = subscribeClasses(
@@ -118,6 +140,10 @@ export function SessionFormModal({
     setMapping(null);
     setError(null);
     setShowCalendar(false);
+    setRepeatEnabled(false);
+    setRepeatCount(DEFAULT_REPEAT);
+    setProgress(null);
+    savedCount.current = 0;
 
     if (initialData?.date instanceof Date) {
       setSelectedDate(initialData.date);
@@ -153,6 +179,9 @@ export function SessionFormModal({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const selectedLab = labs.find((lab) => lab.id === labId);
+
+  const parsedRepeat = parseInt(repeatCount, 10) || 0;
+  const repeatValid = parsedRepeat >= MIN_REPEAT && parsedRepeat <= MAX_REPEAT;
 
   const handleSelectCourse = (course: string) => {
     setCourseName(course);
@@ -246,6 +275,7 @@ export function SessionFormModal({
   };
 
   const handleSave = async () => {
+    if (busy) return;
     if (!courseName.trim()) return setError('Pilih Mata Kuliah terlebih dahulu.');
     if (!className.trim()) return setError('Pilih Kelas Praktikum terlebih dahulu.');
     if (!selectedLab) return setError('Pilih Laboratorium (ruangan dan lokasi presensi).');
@@ -263,33 +293,56 @@ export function SessionFormModal({
     if (selDate < today) return setError('Tidak bisa memilih tanggal di masa lalu.');
     if (endTime <= startTime) return setError('Jam selesai harus lebih lambat dari jam mulai.');
 
+    const repeating = mode === 'create' && repeatEnabled;
+    if (repeating && !repeatValid) {
+      return setError(`Jumlah pertemuan harus antara ${MIN_REPEAT} dan ${MAX_REPEAT}.`);
+    }
+    const total = repeating ? parsedRepeat : 1;
+
     setError(null);
     setBusy(true);
 
-    const dateLabelFormatted = formatIndonesianDate(selectedDate);
     const timeRangeFormatted = `${startTime}–${endTime} WIB`;
 
     try {
-      await onSubmit({
-        courseName: courseName.trim(),
-        courseCode: courseCode.trim(),
-        classId: classId || undefined,
-        className: className.trim(),
-        dateLabel: dateLabelFormatted,
-        timeRange: timeRangeFormatted,
-        room: selectedLab.name,
-        labId: selectedLab.id,
-        radiusM: radiusValue,
-        description: description.trim(),
-        participantIds,
-        date: selectedDate,
-        dateTimestamp: Timestamp.fromDate(selectedDate),
-        startTime: startTime.trim(),
-        endTime: endTime.trim(),
-      });
+      // Lanjut dari sesi yang belum tersimpan (kalau percobaan sebelumnya gagal di tengah)
+      for (let i = savedCount.current; i < total; i++) {
+        setProgress({ done: i, total });
+        const sessionDate = i === 0 ? selectedDate : addDays(selectedDate, i * 7);
+
+        await onSubmit({
+          courseName: courseName.trim(),
+          courseCode: courseCode.trim(),
+          classId: classId || undefined,
+          className: className.trim(),
+          dateLabel: formatIndonesianDate(sessionDate),
+          timeRange: timeRangeFormatted,
+          room: selectedLab.name,
+          labId: selectedLab.id,
+          radiusM: radiusValue,
+          description: description.trim(),
+          participantIds,
+          date: sessionDate,
+          dateTimestamp: Timestamp.fromDate(sessionDate),
+          startTime: startTime.trim(),
+          endTime: endTime.trim(),
+        });
+        savedCount.current = i + 1;
+      }
+      savedCount.current = 0;
+      setProgress(null);
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Gagal menyimpan sesi praktikum.');
+      const reason = err?.message || 'Gagal menyimpan sesi praktikum.';
+      if (savedCount.current > 0) {
+        setError(
+          `${savedCount.current} dari ${total} sesi sudah tersimpan. ${reason} ` +
+            'Tekan simpan lagi untuk melanjutkan sisanya.'
+        );
+      } else {
+        setError(reason);
+      }
+      setProgress(null);
     } finally {
       setBusy(false);
     }
@@ -398,6 +451,19 @@ export function SessionFormModal({
     );
   };
 
+  const repeating = mode === 'create' && repeatEnabled;
+  const lastRepeatDate = repeatValid ? addDays(selectedDate, (parsedRepeat - 1) * 7) : null;
+
+  const saveLabel = busy
+    ? progress
+      ? `Menyimpan ${Math.min(progress.done + 1, progress.total)} dari ${progress.total}...`
+      : 'Menyimpan...'
+    : mode === 'create'
+      ? repeating && repeatValid
+        ? `Simpan ${parsedRepeat} Sesi`
+        : 'Simpan Sesi'
+      : 'Simpan Perubahan';
+
   return (
     <Modal
       transparent
@@ -408,7 +474,7 @@ export function SessionFormModal({
       onShow={resetFormFromInitial}
     >
       <KeyboardAvoidingView style={styles.overlay} behavior="padding">
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable style={styles.backdrop} onPress={busy ? undefined : onClose} />
         <View style={styles.sheet}>
           <View style={styles.grabber} />
           <Text style={styles.formTitle}>
@@ -488,7 +554,9 @@ export function SessionFormModal({
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Tanggal Praktikum</Text>
+              <Text style={styles.label}>
+                {repeating ? 'Tanggal Pertemuan Pertama' : 'Tanggal Praktikum'}
+              </Text>
               <Pressable style={styles.dropdownInput} onPress={() => setShowCalendar(!showCalendar)}>
                 <Text style={styles.dropdownInputText}>{formatIndonesianDate(selectedDate)}</Text>
                 <Ionicons name="calendar-outline" size={18} color="#64748B" />
@@ -532,8 +600,59 @@ export function SessionFormModal({
               </View>
             </View>
 
+            {mode === 'create' ? (
+              <View style={styles.fieldGroup}>
+                <View style={styles.repeatHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.repeatTitle}>Ulangi setiap minggu</Text>
+                    <Text style={styles.hintText}>
+                      Buat beberapa sesi sekaligus di hari dan jam yang sama.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={repeatEnabled}
+                    onValueChange={setRepeatEnabled}
+                    disabled={busy}
+                    trackColor={{ false: '#CBD5E1', true: '#1B2A4E' }}
+                    thumbColor="#FFFFFF"
+                    accessibilityLabel="Ulangi setiap minggu"
+                  />
+                </View>
+
+                {repeatEnabled ? (
+                  <View style={styles.repeatBody}>
+                    <Text style={styles.label}>Jumlah pertemuan</Text>
+                    <View style={styles.radiusRow}>
+                      <TextInput
+                        style={styles.radiusInput}
+                        value={repeatCount}
+                        onChangeText={(text) => setRepeatCount(text.replace(/[^0-9]/g, '').slice(0, 2))}
+                        keyboardType="number-pad"
+                        maxLength={2}
+                        editable={!busy}
+                        placeholder={`${MIN_REPEAT}-${MAX_REPEAT}`}
+                        placeholderTextColor="#94A3B8"
+                        accessibilityLabel="Jumlah pertemuan"
+                      />
+                      <Text style={styles.radiusUnit}>kali</Text>
+                    </View>
+                    {repeatValid && lastRepeatDate ? (
+                      <Text style={styles.repeatSummary}>
+                        Total {parsedRepeat} sesi, setiap {FULL_DAY_NAMES[selectedDate.getDay()]}:{' '}
+                        {formatShortDate(selectedDate)} sampai {formatShortDate(lastRepeatDate)}.
+                      </Text>
+                    ) : (
+                      <Text style={styles.repeatInvalid}>
+                        Isi jumlah pertemuan {MIN_REPEAT} sampai {MAX_REPEAT}.
+                      </Text>
+                    )}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Topik / Deskripsi (Opsional)</Text>
+              <Text style={styles.label}>Deskripsi (Opsional)</Text>
               <TextInput 
                 style={[styles.input, styles.multilineInput]} 
                 value={description} 
@@ -541,7 +660,7 @@ export function SessionFormModal({
                 multiline 
                 numberOfLines={2} 
                 editable={!busy} 
-                placeholder="Contoh: Modul 4 - Firebase"
+                placeholder="Ketik deskripsi"
                 placeholderTextColor="#94A3B8"
               />
             </View>
@@ -550,7 +669,14 @@ export function SessionFormModal({
 
             <View style={styles.buttonRow}>
               <Pressable disabled={busy} style={[styles.button, styles.saveButton]} onPress={handleSave}>
-                {busy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveButtonText}>{mode === 'create' ? 'Simpan Sesi' : 'Simpan Perubahan'}</Text>}
+                {busy ? (
+                  <View style={styles.savingRow}>
+                    <ActivityIndicator color="#fff" size="small" />
+                    <Text style={styles.saveButtonText}>{saveLabel}</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.saveButtonText}>{saveLabel}</Text>
+                )}
               </Pressable>
               <Pressable disabled={busy} style={[styles.button, styles.cancelButton]} onPress={onClose}>
                 <Text style={styles.cancelButtonText}>Batal</Text>
@@ -585,6 +711,19 @@ const styles = StyleSheet.create({
   radiusInput: { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#1B2A4E' },
   radiusUnit: { fontSize: 14, fontWeight: '700', color: '#64748B' },
   hintText: { fontSize: 12, color: '#64748B', marginTop: 8 },
+
+  // Pengulangan mingguan
+  repeatHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  repeatTitle: { fontSize: 14, fontWeight: '800', color: '#1B2A4E' },
+  repeatBody: {
+    marginTop: 12,
+    backgroundColor: '#F4F7FB',
+    borderRadius: 14,
+    padding: 14,
+  },
+  repeatSummary: { fontSize: 13, color: '#15803D', fontWeight: '700', marginTop: 10, lineHeight: 19 },
+  repeatInvalid: { fontSize: 13, color: '#B91C1C', fontWeight: '600', marginTop: 10 },
+
   calendarContainer: { marginTop: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16, padding: 16, elevation: 2 },
   calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingHorizontal: 4 },
   calendarNavButton: { padding: 6 },
@@ -606,6 +745,7 @@ const styles = StyleSheet.create({
   button: { flex: 1, paddingVertical: 16, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   saveButton: { backgroundColor: '#1B2A4E' },
   saveButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  savingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cancelButton: { backgroundColor: '#F1F5F9' },
   cancelButtonText: { color: '#64748B', fontSize: 15, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },

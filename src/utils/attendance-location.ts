@@ -1,4 +1,5 @@
 import type { AttendanceQr, CheckInEvidence, DevicePosition, Lab } from '@/types/sprint-three';
+import { getSessionStatus } from '@/utils/session-status';
 
 export const MAX_POSITION_AGE_MS = 30_000;
 export const MAX_POSITION_ACCURACY_METERS = 50;
@@ -73,9 +74,16 @@ export function parseAttendanceQr(raw: string): AttendanceQr {
   return { type: value.type, version: value.version, sessionId: value.sessionId, token: value.token };
 }
 
-export function validateCheckIn(session: { id: string; status: unknown; attendanceRadiusMeters?: number; qrToken?: string },
-  lab: Lab, evidence: CheckInEvidence, now = Date.now()) {
-  if (session.status !== 'open') throw new Error('Sesi belum dibuka atau sudah ditutup oleh asisten.');
+export function validateCheckIn(
+  session: { id: string; attendanceRadiusMeters?: number; qrToken?: string } & Record<string, any>,
+  lab: Lab,
+  evidence: CheckInEvidence,
+  now = Date.now(),
+) {
+  // Status dihitung dari jam sesi, bukan hanya dari field database
+  const status = getSessionStatus(session, new Date(now));
+  if (status === 'upcoming') throw new Error('Sesi belum dibuka. Presensi bisa dilakukan setelah jam mulai.');
+  if (status === 'closed') throw new Error('Sesi sudah ditutup. Presensi tidak dapat dilakukan lagi.');
   if (!evidence?.position || !['location', 'qr'].includes(evidence.method)) {
     throw new Error('Lokasi perangkat wajib diperiksa sebelum presensi.');
   }

@@ -18,6 +18,7 @@ import type { CloudSession } from '@/types/practitioner';
 import type { AttendanceQr, DevicePosition } from '@/types/sprint-three';
 import { assessPosition, sessionRadius, validateCheckIn } from '@/utils/attendance-location';
 import { firebaseErrorMessage } from '@/utils/firebase-error';
+import { getSessionStatus } from '@/utils/session-status';
 
 const QrScanner = lazy(() => import('@/components/attendance-qr-scanner'));
 const STATUS = { upcoming: 'Belum dibuka', open: 'Dibuka', closed: 'Ditutup' } as const;
@@ -39,7 +40,8 @@ export default function AttendanceScreen() {
     setChoice(null);
   }, []));
 
-  const openSessions = sessions.filter((session) => session.status === 'open');
+  // Status dihitung dari jam sesi, bukan hanya dari field database
+  const openSessions = sessions.filter((session) => getSessionStatus(session) === 'open');
   const automaticId = openSessions.length === 1 ? openSessions[0].id : '';
   const selectedId = choice?.requested === requested ? choice.selected : requested || automaticId;
   const selected = sessions.find((session) => session.id === selectedId);
@@ -86,12 +88,13 @@ export default function AttendanceScreen() {
                 <View style={styles.card}>
                   <Text accessibilityRole="header" style={styles.cardTitle}>Pilih sesi</Text>
                   {sessions.map((session) => {
-                    const sc = STATUS_COLOR[session.status] ?? STATUS_COLOR.upcoming;
+                    const liveStatus = getSessionStatus(session);
+                    const sc = STATUS_COLOR[liveStatus] ?? STATUS_COLOR.upcoming;
                     return (
                       <Pressable
                         key={session.id}
                         accessibilityRole="radio"
-                        accessibilityLabel={`${session.courseName}, ${session.className}, ${STATUS[session.status] ?? 'Status tidak valid'}`}
+                        accessibilityLabel={`${session.courseName}, ${session.className}, ${STATUS[liveStatus] ?? 'Status tidak valid'}`}
                         accessibilityState={{ checked: selectedId === session.id }}
                         onPress={() => setChoice({ requested, selected: session.id })}
                         style={({ pressed }) => [
@@ -108,7 +111,7 @@ export default function AttendanceScreen() {
                         </View>
                         <View style={[styles.pill, { backgroundColor: sc.bg }]}>
                           <Text style={[styles.pillText, { color: sc.fg }]}>
-                            {STATUS[session.status] ?? 'Tidak valid'}
+                            {STATUS[liveStatus] ?? 'Tidak valid'}
                           </Text>
                         </View>
                         <Ionicons
@@ -123,25 +126,14 @@ export default function AttendanceScreen() {
               ) : null}
 
               {selected ? (
-                <>
-                  <SelectedSession key={`${profile.uid}:${selected.id}`} session={selected} />
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Pilih sesi lain"
-                    onPress={showSessionList}
-                    style={styles.changeLink}
-                  >
-                    <Ionicons name="swap-horizontal-outline" size={18} color={authColors.navy} />
-                    <Text style={styles.changeLinkText}>Pilih sesi lain</Text>
-                  </Pressable>
-                </>
+                <SelectedSession key={`${profile.uid}:${selected.id}`} session={selected} />
               ) : (
                 <StateView
                   kind={selectedId ? 'error' : 'empty'}
                   title={selectedId ? 'Sesi tidak tersedia untuk akunmu' : 'Pilih sesi untuk melanjutkan'}
                   message={
                     selectedId
-                      ? 'Sesi mungkin dihapus atau kamu belum menjadi peserta. Pilih sesi lain atau hubungi asisten.'
+                      ? 'Sesi mungkin dihapus atau kamu belum menjadi peserta. Hubungi asisten untuk memastikan.'
                       : 'Informasi lab, pemeriksaan lokasi, dan tombol presensi akan tampil setelah sesi dipilih.'
                   }
                 />
@@ -171,6 +163,10 @@ function SelectedSession({ session }: { session: CloudSession }) {
   const alive = useRef(true);
   const focused = useRef(false);
   const locationRequest = useRef<AbortController | null>(null);
+
+  // Status dihitung dari jam, di-refresh tiap 5 detik lewat `now`
+  const liveStatus = getSessionStatus(session, new Date(now));
+
   useEffect(() => {
     alive.current = true;
     return () => { alive.current = false; locationRequest.current?.abort(); };
@@ -210,7 +206,7 @@ function SelectedSession({ session }: { session: CloudSession }) {
     }
   } catch (failure) { assessmentError = (failure as Error).message; }
   const available = !loading && !stateError && !cached && !!labState.lab && !labState.loading && !labState.error
-    && radius > 0 && session.status === 'open' && !attended && !requested;
+    && radius > 0 && liveStatus === 'open' && !attended && !requested;
   const canSubmit = available && !!assessment?.inside && !busy && !locating;
 
   async function locate() {
@@ -247,7 +243,7 @@ function SelectedSession({ session }: { session: CloudSession }) {
     } finally { lock.current = false; if (alive.current) setBusy(false); }
   }
 
-  const sc = STATUS_COLOR[session.status] ?? STATUS_COLOR.upcoming;
+  const sc = STATUS_COLOR[liveStatus] ?? STATUS_COLOR.upcoming;
   const locationChip = assessment
     ? assessment.inside
       ? { text: `Di dalam radius · ${Math.ceil(assessment.distance)} m`, bg: '#E6F6EC', fg: '#166534' }
@@ -266,7 +262,7 @@ function SelectedSession({ session }: { session: CloudSession }) {
             <Text style={styles.meta}>{session.className} · {session.room}</Text>
             <View style={[styles.pill, styles.statusPill, { backgroundColor: sc.bg }]}>
               <Text style={[styles.pillText, { color: sc.fg }]}>
-                {STATUS[session.status] ?? 'Tidak valid'}
+                {STATUS[liveStatus] ?? 'Tidak valid'}
               </Text>
             </View>
           </View>
@@ -306,6 +302,15 @@ function SelectedSession({ session }: { session: CloudSession }) {
 
       {!attended && !requested ? (
         <>
+          {liveStatus === 'upcoming' ? (
+            <Notice text="Sesi belum dibuka. Presensi bisa dilakukan setelah jam mulai." />
+          ) : null}
+          {liveStatus === 'closed' ? (
+            <Notice text="Sesi sudah ditutup. Presensi tidak dapat dilakukan lagi." />
+          ) : null}
+          {!session.labId ? (
+            <Notice text="Laboratorium sesi belum diatur. Hubungi asisten untuk melengkapinya." />
+          ) : null}
 
           <View style={[styles.card, styles.labCard]}>
             <View style={styles.infoRow}>
@@ -601,16 +606,6 @@ const styles = StyleSheet.create({
   locationResult: { padding: 12, borderRadius: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#E6F6EC' },
   locationOutside: { backgroundColor: '#FFF3D6' },
   resultTitle: { color: authColors.navy, fontSize: 15, lineHeight: 22, fontWeight: '800' },
-
-  changeLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    minHeight: 44,
-    marginTop: 4,
-  },
-  changeLinkText: { color: authColors.navy, fontSize: 14, fontWeight: '700' },
 
   scanner: { padding: 20, flexGrow: 1, backgroundColor: authColors.background },
 });

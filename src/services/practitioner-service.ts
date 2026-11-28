@@ -43,14 +43,21 @@ export async function recordParticipation(sessionId: string, reason?: string, ev
     if (!Array.isArray(session.participantIds) || !session.participantIds.includes(uid)) throw new Error('Kamu bukan peserta sesi ini.');
     if (attendanceDoc.exists()) throw new Error('Presensi untuk sesi ini sudah tercatat.');
     if (permissionDoc.exists()) throw new Error('Izin untuk sesi ini sudah diajukan. Periksa statusnya di riwayat.');
+
+    // Status dihitung dari jam sesi (opensAt/closesAt), bukan dari field `status`
+    // di database yang bisa basi.
+    const live = { ...session, id: sessionId };
+    const liveStatus = getSessionStatus(live);
+
     if (reason === undefined) {
-      if (session.status !== 'open') throw new Error('Sesi belum dibuka atau sudah ditutup oleh asisten.');
+      if (liveStatus === 'upcoming') throw new Error('Sesi belum dibuka. Presensi bisa dilakukan setelah jam mulai.');
+      if (liveStatus !== 'open') throw new Error('Sesi sudah ditutup. Presensi tidak dapat dilakukan lagi.');
       if (!isDocumentId(session.labId)) throw new Error('Laboratorium sesi belum diatur. Hubungi asisten.');
       if (!evidence) throw new Error('Lokasi perangkat wajib diperiksa sebelum presensi.');
       const labDoc = await transaction.get(doc(database, 'labs', session.labId));
       if (!labDoc.exists()) throw new Error('Laboratorium sesi tidak ditemukan. Hubungi asisten.');
       const lab = readLab(labDoc.id, labDoc.data());
-      validateCheckIn({ ...session, id: sessionId }, lab, evidence);
+      validateCheckIn(live, lab, evidence);
       const { position, method } = evidence;
       transaction.set(attendanceRef, {
         sessionId, practitionerId: uid, checkedInAt: serverTimestamp(), session: summary(session),
@@ -63,7 +70,7 @@ export async function recordParticipation(sessionId: string, reason?: string, ev
         ...(method === 'qr' ? { qrToken: evidence.qr!.token } : {}),
       });
     } else {
-      if (getSessionStatus(session) === 'closed') throw new Error('Sesi sudah ditutup. Hubungi asisten untuk pengajuan susulan.');
+      if (liveStatus === 'closed') throw new Error('Sesi sudah ditutup. Hubungi asisten untuk pengajuan susulan.');
       transaction.set(permissionRef, {
         sessionId, practitionerId: uid, reason: reason.trim(), status: 'pending',
         createdAt: serverTimestamp(), session: summary(session), ai: { status: 'pending' },

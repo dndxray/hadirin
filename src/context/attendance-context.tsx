@@ -1,5 +1,5 @@
 import { collection, onSnapshot, query, where, type Timestamp } from 'firebase/firestore';
-import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
@@ -7,6 +7,7 @@ import { recordParticipation } from '@/services/practitioner-service';
 import type { CloudAttendance, CloudSession, PermissionRequest } from '@/types/practitioner';
 import type { CheckInEvidence } from '@/types/sprint-three';
 import { firebaseErrorMessage } from '@/utils/firebase-error';
+import { getSessionStatus } from '@/utils/session-status';
 
 type Resource<T> = { data: T[]; loading: boolean; error: string | null; fromCache: boolean };
 const initial = <T,>(): Resource<T> => ({ data: [], loading: true, error: null, fromCache: false });
@@ -60,12 +61,30 @@ export function AttendanceProvider({ children }: PropsWithChildren) {
 }
 
 function Subscriptions({ uid, retry, children }: PropsWithChildren<{ uid?: string; retry: () => void }>) {
-  const sessionState = useOwnCollection<CloudSession>('sessions', uid, 'participantIds', true);
+  const rawSessionState = useOwnCollection<CloudSession>('sessions', uid, 'participantIds', true);
   const attendanceState = useOwnCollection<CloudAttendance>('attendance', uid, 'practitionerId', false);
   const permissionState = useOwnCollection<PermissionRequest>('permissionRequests', uid, 'practitionerId', false);
+
+  // Jam berjalan supaya status sesi (belum dibuka / dibuka / ditutup) ikut berubah
+  const [tick, setTick] = useState(Date.now);
+  useEffect(() => {
+    const id = setInterval(() => setTick(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Status dihitung dari jam sesi, bukan hanya dari field database
+  const sessions = useMemo<CloudSession[]>(
+    () => rawSessionState.data.map((session) => ({
+      ...session,
+      status: getSessionStatus(session, new Date(tick)),
+    })),
+    [rawSessionState.data, tick],
+  );
+  const sessionState = useMemo(() => ({ ...rawSessionState, data: sessions }), [rawSessionState, sessions]);
+
   const hasAttended = useCallback((id: string) => attendanceState.data.some((r) => r.sessionId === id), [attendanceState.data]);
   return <Context.Provider value={{
-    sessions: sessionState.data, records: attendanceState.data, permissions: permissionState.data,
+    sessions, records: attendanceState.data, permissions: permissionState.data,
     sessionState, attendanceState, permissionState, hasAttended, retry,
     checkIn: (id, evidence) => recordParticipation(id, undefined, evidence),
     submitPermission: (id, reason) => recordParticipation(id, reason),

@@ -91,7 +91,7 @@ export function getSessionSchedule(data: any): SessionSchedule | null {
  * - `status === 'closed'` di database = asisten menutup manual → tetap tertutup.
  * - Lewat jam selesai → otomatis tertutup.
  * - Sudah masuk jam mulai → otomatis terbuka.
- * - Sebelum jam mulai hanya terbuka kalau asisten sudah membukanya.
+ * - Sebelum jam mulai selalu "upcoming" (tidak bisa dibuka lebih awal).
  */
 export function getSessionStatus(data: any, now: Date = new Date()): SessionStatusType {
   const stored = normalizeSessionStatus(data?.status);
@@ -101,7 +101,7 @@ export function getSessionStatus(data: any, now: Date = new Date()): SessionStat
   if (stored === 'closed') return 'closed';
   if (now > schedule.end) return 'closed';
   if (now >= schedule.start) return 'open';
-  return stored === 'open' ? 'open' : 'upcoming';
+  return 'upcoming';
 }
 
 export function isSessionFinished(data: any, now: Date = new Date()): boolean {

@@ -18,7 +18,11 @@ import {
 import { auth, db } from '@/lib/firebase';
 import { normalizeNim } from '@/utils/nim';
 import { hasRole } from '@/utils/roles';
-import { getSessionStatus, normalizeSessionStatus } from '@/utils/session-status';
+import {
+  getSessionSchedule,
+  getSessionStatus,
+  normalizeSessionStatus,
+} from '@/utils/session-status';
 import type {
   Attendance,
   PermissionRequestItem,
@@ -48,6 +52,18 @@ export type SessionInput = {
 // In-memory cache for user profile resolution (UID -> { name, nim })
 const userProfileCache = new Map<string, { name: string; nim: string }>();
 const aiInFlight = new Set<string>();
+
+// Jadwal sesi disimpan sebagai Timestamp supaya Firestore Rules bisa
+// membandingkannya dengan waktu server (presensi di luar jam ditolak server).
+function scheduleFields(data: Record<string, any>) {
+  const schedule = getSessionSchedule(data);
+  return schedule
+    ? {
+        opensAt: Timestamp.fromDate(schedule.start),
+        closesAt: Timestamp.fromDate(schedule.end),
+      }
+    : {};
+}
 
 // Aturan token sama dengan parseAttendanceQr di utils/attendance-location.ts
 const QR_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
@@ -256,6 +272,14 @@ export async function createSession(
       dateTimestamp: dateTimestamp,
       startTime: input.startTime?.trim() || '',
       endTime: input.endTime?.trim() || '',
+      // Jendela waktu presensi (dibaca Firestore Rules)
+      ...scheduleFields({
+        dateLabel: input.dateLabel,
+        timeRange: input.timeRange,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        dateTimestamp,
+      }),
       // Token QR presensi: dipakai scanner praktikan untuk memvalidasi QR sesi ini.
       qrToken: generateQrToken(),
       // Lab dan radius presensi (SRS-32). Hanya disimpan kalau dipilih,
@@ -336,6 +360,9 @@ export async function updateSession(
     updatePayload.dateTimestamp = dateTs;
   }
 
+  // Hitung ulang jendela waktu dari data lama + perubahan
+  Object.assign(updatePayload, scheduleFields({ ...snap.data(), ...updatePayload }));
+
   try {
     await updateDoc(sessionRef, updatePayload);
   } catch (err: any) {
@@ -378,14 +405,25 @@ export async function setSessionStatus(
   if (!snap.exists()) {
     throw new Error('Sesi praktikum tidak ditemukan di server.');
   }
-  await updateDoc(sessionRef, {
-    status: newStatus,
-  });
+
+  if (newStatus === 'open') {
+    const schedule = getSessionSchedule(snap.data());
+    const now = new Date();
+    if (schedule && now < schedule.start) {
+      throw new Error('Sesi belum bisa dibuka sebelum jam mulai.');
+    }
+    if (schedule && now > schedule.end) {
+      throw new Error('Sesi sudah berakhir dan tidak bisa dibuka lagi.');
+    }
+  }
+
+  await updateDoc(sessionRef, { status: newStatus });
 }
 
 /**
  * Menyimpan transisi status otomatis (upcoming → open → closed) supaya field
- * `status` di Firestore sama dengan yang dilihat di layar. Hanya asisten yang
+ * `status` di Firestore sama dengan yang dilihat di layar. Sekaligus mengisi
+ * `opensAt`/`closesAt` untuk sesi lama yang belum punya. Hanya asisten yang
  * boleh menulis dokumen sesi, jadi fungsi ini dipanggil dari layar asisten.
  */
 export async function syncSessionStatuses(
@@ -398,11 +436,15 @@ export async function syncSessionStatuses(
       id: session.id,
       current: normalizeSessionStatus(session.status),
       next: getSessionStatus(session),
+      // Sesi lama belum punya jendela waktu: isi sekali
+      window: session.opensAt && session.closesAt ? {} : scheduleFields(session),
     }))
-    .filter((item) => item.current !== item.next);
+    .filter((item) => item.current !== item.next || Object.keys(item.window).length > 0);
 
   await Promise.allSettled(
-    pending.map((item) => updateDoc(doc(db!, 'sessions', item.id), { status: item.next }))
+    pending.map((item) =>
+      updateDoc(doc(db!, 'sessions', item.id), { status: item.next, ...item.window })
+    )
   );
 }
 
