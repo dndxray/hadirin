@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { authColors } from '@/components/auth-ui';
 import type { Lab } from '@/types/lab'; // Sesuaikan path tipe Lab lu
@@ -15,41 +15,46 @@ type Props = {
 
 export function LabInfoSheet({ lab, sessions = [], loading, error, onClose }: Props) {
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>{lab.name}</Text>
-          <Text style={styles.subtitle}>Radius presensi {lab.radiusMeters} m</Text>
-        </View>
-        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-          <Ionicons name="close" size={24} color={authColors.ink} />
-        </TouchableOpacity>
-      </View>
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        <View style={styles.sheet}>
+          <View style={styles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title}>{lab.name}</Text>
+              <Text style={styles.subtitle}>Radius presensi {lab.radiusMeters} m</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <Ionicons name="close" size={24} color={authColors.ink} />
+            </TouchableOpacity>
+          </View>
 
-      <ScrollView style={styles.content}>
-        {loading ? (
-          <View style={styles.centerBox}>
-            <ActivityIndicator color={authColors.navy} />
-            <Text style={styles.msg}>Memuat jadwal kelas...</Text>
-          </View>
-        ) : error ? (
-          <View style={styles.centerBox}>
-            <Ionicons name="alert-circle-outline" size={32} color={authColors.danger} />
-            <Text style={styles.errorMsg}>{error}</Text>
-          </View>
-        ) : sessions.length === 0 ? (
-          <View style={styles.centerBox}>
-            <Ionicons name="calendar-outline" size={32} color={authColors.muted} />
-            <Text style={styles.msg}>Belum ada jadwal praktikum di lab ini.</Text>
-          </View>
-        ) : (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Jadwal Praktikum</Text>
-            {sessions.map(s => <CardClass key={s.id} data={s} />)}
-          </View>
-        )}
-      </ScrollView>
-    </View>
+          <ScrollView style={styles.content}>
+            {loading ? (
+              <View style={styles.centerBox}>
+                <ActivityIndicator color={authColors.navy} />
+                <Text style={styles.msg}>Memuat jadwal kelas...</Text>
+              </View>
+            ) : error ? (
+              <View style={styles.centerBox}>
+                <Ionicons name="alert-circle-outline" size={32} color={authColors.danger} />
+                <Text style={styles.errorMsg}>{error}</Text>
+              </View>
+            ) : sessions.length === 0 ? (
+              <View style={styles.centerBox}>
+                <Ionicons name="calendar-outline" size={32} color={authColors.muted} />
+                <Text style={styles.msg}>Belum ada jadwal praktikum di lab ini.</Text>
+              </View>
+            ) : (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Jadwal Praktikum</Text>
+                {sessions.map(s => <CardClass key={s.id} data={s} />)}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -69,12 +74,25 @@ function CardClass({ data }: { data: ClassSchedule }) {
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: authColors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 24, maxHeight: '60%' },
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+  sheet: {
+    backgroundColor: authColors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 24,
+    maxHeight: '60%',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -2 },
+  },
   header: { flexDirection: 'row', padding: 20, borderBottomWidth: 1, borderBottomColor: authColors.border, alignItems: 'center' },
   title: { fontSize: 18, fontWeight: '800', color: authColors.ink },
   subtitle: { fontSize: 13, color: authColors.muted, marginTop: 4 },
   closeBtn: { padding: 4 },
-  content: { padding: 20 },
+  content: { padding: 20, flexShrink: 1 },
   centerBox: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, gap: 8 },
   msg: { color: authColors.muted, fontSize: 14, textAlign: 'center' },
   errorMsg: { color: authColors.danger, fontSize: 14, textAlign: 'center' },

@@ -12,6 +12,7 @@ import { StateView } from '@/components/state-view';
 import { useAttendance } from '@/context/attendance-context';
 import { useAuth } from '@/context/auth-context';
 import { sessionMs } from '@/utils/schedule';
+import { getSessionStatus } from '@/utils/session-status';
 
 const DAYS = [
   'Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu',
@@ -26,8 +27,8 @@ type Entry = { session: any; status: string; ms: number };
 type DayGroup = { date: Date; items: Entry[]; isToday: boolean };
 
 // Minggu dimulai hari Senin
-function weekStart(offset: number) {
-  const d = new Date();
+function weekStart(offset: number, now: Date) {
+  const d = new Date(now);
   d.setHours(0, 0, 0, 0);
   const diff = (d.getDay() + 6) % 7;
   d.setDate(d.getDate() - diff + offset * 7);
@@ -61,18 +62,18 @@ export default function JadwalScreen() {
   const { sessions, sessionState, retry } = useAttendance();
 
   const [weekOffset, setWeekOffset] = useState(0);
-  const [tick, setTick] = useState(0);
+  const [nowMs, setNowMs] = useState(Date.now);
 
-  // Perbarui status sesi setiap menit
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 60000);
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
 
   const { days, total } = useMemo(() => {
-    const ws = weekStart(weekOffset);
+    const now = new Date(nowMs);
+    const ws = weekStart(weekOffset, now);
 
-    const todayStart = new Date();
+    const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
 
     const sections: DayGroup[] = Array.from(
@@ -103,7 +104,7 @@ export default function JadwalScreen() {
       if (section) {
         section.items.push({
           session,
-          status: '',
+          status: getSessionStatus(session, now),
           ms,
         });
       }
@@ -121,13 +122,9 @@ export default function JadwalScreen() {
       days: sections,
       total: sections.reduce((sum, day) => sum + day.items.length, 0),
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, weekOffset, tick]);
+  }, [sessions, weekOffset, nowMs]);
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/home');
-  };
+  const goBack = () => router.replace('/home');
 
   if (authLoading) return <StateView kind="loading" />;
   if (!profile) return <Redirect href="/login" />;

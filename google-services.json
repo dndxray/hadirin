@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "111689895720",
+    "project_id": "hadirin-f6a98",
+    "storage_bucket": "hadirin-f6a98.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:111689895720:android:f744df6f70de77c1c98a1d",
+        "android_client_info": {
+          "package_name": "com.dindaisyrn.hadirin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhgltdd1IQ4kIsS08rNaJki49zuRzGad0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
