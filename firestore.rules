@@ -109,19 +109,6 @@ service cloud.firestore {
       };
     }
 
-    function validLab(data) {
-      return data.name is string && data.name.size() > 0 && data.name.size() <= 120
-        && data.latitude is number && data.latitude >= -90 && data.latitude <= 90
-        && data.longitude is number && data.longitude >= -180 && data.longitude <= 180
-        && data.radiusMeters is number && data.radiusMeters >= 1 && data.radiusMeters <= 1000;
-    }
-
-    match /labs/{id} {
-      allow read: if signedIn();
-      allow create, update: if isAsisten() && validLab(request.resource.data);
-      allow delete: if isAsisten();
-    }
-
     function validAttendanceLocation(data) {
       let s = sessionData(data.sessionId);
       let lab = get(/databases/$(database)/documents/labs/$(s.labId)).data;

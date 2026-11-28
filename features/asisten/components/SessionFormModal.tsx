@@ -13,8 +13,9 @@ import {
   View
 } from 'react-native';
 
+import { useLabs } from '../../../src/hooks/use-labs';
 import { ClassData, subscribeClasses } from '../../../src/lib/classes';
-import { LABS } from '../../../src/lib/geo';
+import { MAX_LAB_RADIUS_METERS } from '../../../src/utils/attendance-location';
 import {
   resolveParticipantUids,
   type ClassParticipant,
@@ -37,10 +38,6 @@ const MONTH_NAMES = [
 ];
 
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-
-const DEFAULT_RADIUS = 50;
-const MIN_RADIUS = 5;
-const MAX_RADIUS = 1000;
 
 const TIME_OPTIONS: string[] = [];
 for (let h = 7; h <= 20; h++) {
@@ -69,6 +66,7 @@ export function SessionFormModal({
   onSubmit,
 }: SessionFormModalProps) {
   const [classes, setClasses] = useState<ClassData[]>([]);
+  const { labs, status: labsStatus } = useLabs();
 
   const [courseName, setCourseName] = useState('');
   const [courseCode, setCourseCode] = useState('');
@@ -78,7 +76,6 @@ export function SessionFormModal({
   // bukan dari data kelas.
   const [room, setRoom] = useState('');
   const [labId, setLabId] = useState('');
-  const [radiusText, setRadiusText] = useState(String(DEFAULT_RADIUS));
   const [description, setDescription] = useState('');
   const [participantIds, setParticipantIds] = useState<string[]>([]);
 
@@ -116,7 +113,6 @@ export function SessionFormModal({
     setClassName(initialData?.className || '');
     setRoom(initialData?.room || '');
     setLabId(initialData?.labId || '');
-    setRadiusText(String(initialData?.radiusM ?? DEFAULT_RADIUS));
     setDescription(initialData?.description || '');
     setParticipantIds(initialData?.participantIds || []);
     setMapping(null);
@@ -156,10 +152,7 @@ export function SessionFormModal({
     .filter((cls) => !courseName || !cls.course || cls.course.toLowerCase() === courseName.toLowerCase())
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const selectedLab = LABS.find((l) => l.id === labId);
-  // Ruangan yang disimpan: nama lab terpilih; untuk sesi lama yang belum
-  // punya lab, pakai ruangan yang sudah ada sampai lab dipilih.
-  const roomValue = selectedLab?.name ?? room;
+  const selectedLab = labs.find((lab) => lab.id === labId);
 
   const handleSelectCourse = (course: string) => {
     setCourseName(course);
@@ -255,14 +248,11 @@ export function SessionFormModal({
   const handleSave = async () => {
     if (!courseName.trim()) return setError('Pilih Mata Kuliah terlebih dahulu.');
     if (!className.trim()) return setError('Pilih Kelas Praktikum terlebih dahulu.');
-    if (!labId) return setError('Pilih Laboratorium (ruangan dan lokasi presensi).');
+    if (!selectedLab) return setError('Pilih Laboratorium (ruangan dan lokasi presensi).');
 
-    const radiusValue = Math.round(Number(radiusText.trim().replace(',', '.')));
-    if (!radiusText.trim() || !Number.isFinite(radiusValue)) {
-      return setError('Isi radius presensi dengan angka (dalam meter).');
-    }
-    if (radiusValue < MIN_RADIUS || radiusValue > MAX_RADIUS) {
-      return setError(`Radius presensi harus antara ${MIN_RADIUS} dan ${MAX_RADIUS} meter.`);
+    const radiusValue = selectedLab.radiusMeters;
+    if (!Number.isFinite(radiusValue) || radiusValue < 1 || radiusValue > MAX_LAB_RADIUS_METERS) {
+      return setError(`Radius laboratorium harus antara 1 dan ${MAX_LAB_RADIUS_METERS} meter.`);
     }
     
     const today = getGMT7Date();
@@ -287,8 +277,8 @@ export function SessionFormModal({
         className: className.trim(),
         dateLabel: dateLabelFormatted,
         timeRange: timeRangeFormatted,
-        room: roomValue.trim(),
-        labId,
+        room: selectedLab.name,
+        labId: selectedLab.id,
         radiusM: radiusValue,
         description: description.trim(),
         participantIds,
@@ -325,6 +315,7 @@ export function SessionFormModal({
 
     let title = '';
     let options: { label: string; value: string; onPress: () => void }[] = [];
+    let emptyPickerMessage = 'Tidak ada pilihan tersedia.';
 
     if (activePicker === 'course') {
       title = 'Pilih Mata Kuliah';
@@ -342,7 +333,10 @@ export function SessionFormModal({
       }));
     } else if (activePicker === 'lab') {
       title = 'Pilih Laboratorium';
-      options = LABS.map(l => ({
+      emptyPickerMessage = labsStatus === 'loading'
+        ? 'Memuat daftar laboratorium...'
+        : 'Daftar laboratorium belum tersedia. Periksa koneksi atau tambahkan lab.';
+      options = labs.map(l => ({
         label: l.name,
         value: l.id,
         onPress: () => {
@@ -379,7 +373,7 @@ export function SessionFormModal({
             <Text style={styles.modalTitle}>{title}</Text>
             <ScrollView style={{ maxHeight: 300 }}>
               {options.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: '#64748B', marginTop: 20 }}>Tidak ada pilihan tersedia.</Text>
+                <Text style={{ textAlign: 'center', color: '#64748B', marginTop: 20 }}>{emptyPickerMessage}</Text>
               ) : (
                 options.map((opt, idx) => (
                   <Pressable
@@ -477,23 +471,19 @@ export function SessionFormModal({
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Radius Presensi</Text>
+              <Text style={styles.label}>Radius Presensi (dari Lab)</Text>
               <View style={styles.radiusRow}>
                 <TextInput
                   style={styles.radiusInput}
-                  value={radiusText}
-                  onChangeText={(v) => setRadiusText(v.replace(/[^0-9.,]/g, ''))}
-                  keyboardType="numeric"
-                  placeholder="Contoh: 50"
+                  value={selectedLab ? String(selectedLab.radiusMeters) : ''}
+                  placeholder="Pilih laboratorium dulu"
                   placeholderTextColor="#94A3B8"
-                  editable={!busy}
-                  maxLength={6}
+                  editable={false}
                 />
                 <Text style={styles.radiusUnit}>meter</Text>
               </View>
               <Text style={styles.hintText}>
-                Praktikan harus berada dalam jangkauan ini dari lab untuk bisa presensi
-                ({MIN_RADIUS}–{MAX_RADIUS} meter).
+                Radius mengikuti laboratorium yang dipilih.
               </Text>
             </View>
 

@@ -32,10 +32,18 @@ export default function AttendanceScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ sessionId?: string | string[] }>();
   const requested = (Array.isArray(params.sessionId) ? params.sessionId[0] : params.sessionId) || '';
-  const [choice, setChoice] = useState({ requested, selected: requested });
-  const selectedId = choice.requested === requested ? choice.selected : requested;
+  const [choice, setChoice] = useState<{ requested: string; selected: string } | null>(null);
   const { sessions, sessionState, retry } = useAttendance();
+
+  useFocusEffect(useCallback(() => {
+    setChoice(null);
+  }, []));
+
+  const openSessions = sessions.filter((session) => session.status === 'open');
+  const automaticId = openSessions.length === 1 ? openSessions[0].id : '';
+  const selectedId = choice?.requested === requested ? choice.selected : requested || automaticId;
   const selected = sessions.find((session) => session.id === selectedId);
+  const showSessionList = () => setChoice({ requested, selected: '' });
   if (loading) return <StateView kind="loading" title="Memuat akun" />;
   if (!profile) return <Redirect href="/login" />;
   if (profile.role !== 'praktikan') return <Redirect href="/home" />;
@@ -50,7 +58,11 @@ export default function AttendanceScreen() {
           <View style={[styles.inner, styles.headerRow]}>
             <BackButton
               accessibilityLabel="Kembali ke halaman sebelumnya"
-              onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
+              onPress={() => {
+                if (selected) showSessionList();
+                else if (router.canGoBack()) router.back();
+                else router.replace('/home');
+              }}
             />
             <Text accessibilityRole="header" style={styles.title}>Presensi</Text>
             <View style={styles.headerSpacer} />
@@ -116,10 +128,7 @@ export default function AttendanceScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Pilih sesi lain"
-                    onPress={() => {
-                      setChoice({ requested, selected: '' });
-                      if (requested) router.replace('/presensi');
-                    }}
+                    onPress={showSessionList}
                     style={styles.changeLink}
                   >
                     <Ionicons name="swap-horizontal-outline" size={18} color={authColors.navy} />

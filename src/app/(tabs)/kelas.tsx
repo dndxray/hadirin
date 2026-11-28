@@ -211,11 +211,6 @@ export default function KelasScreen() {
     return () => unsubscribe();
   }, [currentUser?.id]);
 
-  // Kosongkan kolom cari setiap picker dibuka atau ditutup
-  useEffect(() => {
-    setPickerSearch('');
-  }, [pickerMode]);
-
   if (currentUser?.role !== 'asisten') return <Redirect href="/home" />;
 
   const activeClass = classes.find((c) => c.id === participantClassId) ?? null;
@@ -606,7 +601,13 @@ export default function KelasScreen() {
           
           <View>
             <Text style={styles.dropdownLabel}>Pilih Praktikan</Text>
-            <Pressable style={styles.dropdownInput} onPress={() => setPickerMode('student')}>
+            <Pressable
+              style={styles.dropdownInput}
+              onPress={() => {
+                setPickerSearch('');
+                setPickerMode('student');
+              }}
+            >
               <Text style={[styles.dropdownInputText, !pForm.name && { color: '#94A3B8' }]}>
                 {pForm.name ? `${pForm.name} (${pForm.nim})` : 'Klik untuk mencari praktikan'}
               </Text>
