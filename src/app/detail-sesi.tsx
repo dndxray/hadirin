@@ -205,7 +205,7 @@ export default function DetailSesiScreen() {
   const [roster, setRoster] = useState<{ nim: string; name: string }[]>([]);
   const [filter, setFilter] = useState<Filter>('semua');
   const [showAll, setShowAll] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(Date.now);
 
   const isAsisten = profile?.role === 'asisten';
   const classId: string = session?.classId ?? '';

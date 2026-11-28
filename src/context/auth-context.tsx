@@ -96,8 +96,16 @@ async function withActiveRole(profile: Profile): Promise<Profile> {
   if (stored === 'praktikan' || stored === 'asisten') {
     if (profile.roles.includes(stored)) return { ...profile, role: stored };
   }
-  await AsyncStorage.setItem(ACTIVE_ROLE_KEY, profile.role);
   return profile;
+}
+
+async function syncProfileEmail(user: User, profile: Profile): Promise<Profile> {
+  const { email, uid } = user;
+  if (!email || profile.email === email) return profile;
+
+  // Email di Auth bisa berubah setelah pengguna mengeklik tautan verifikasi.
+  await updateDoc(doc(db, 'users', uid), { email }).catch(() => {});
+  return { ...profile, email };
 }
 
 async function rememberRole(role: Role) {
@@ -197,10 +205,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const registering = useRef(false);
+  const authAction = useRef<'login' | 'register' | null>(null);
+  const sessionRevision = useRef(0);
 
   useEffect(() => {
+    let disposed = false;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      // Login publishes the session only after validating the selected role.
+      if (authAction.current === 'login' || user?.uid !== auth.currentUser?.uid) return;
+
+      const revision = ++sessionRevision.current;
       setFirebaseUser(user);
 
       if (!user) {
@@ -209,26 +223,26 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return;
       }
 
-      if (registering.current) return;
+      if (authAction.current === 'register') return;
 
+      let restored: Profile | null = null;
       try {
-        const next = await fetchProfile(user.uid);
-
-        // Email di Auth bisa berubah setelah user klik link verifikasi.
-        // Sinkronkan ke dokumen profil.
-        if (next && user.email && next.email !== user.email) {
-          await updateDoc(doc(db, 'users', user.uid), { email: user.email }).catch(() => {});
-          next.email = user.email;
+        const stored = await fetchProfile(user.uid);
+        if (stored?.roles.length && !disposed && revision === sessionRevision.current) {
+          restored = await withActiveRole(await syncProfileEmail(user, stored));
         }
-
-        setProfile(next ? await withActiveRole(next) : null);
       } catch {
-        setProfile(null);
+        // Keep the app signed out if the saved profile cannot be restored.
       }
+      if (disposed || revision !== sessionRevision.current || user.uid !== auth.currentUser?.uid) return;
+      setProfile(restored);
       setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
   }, []);
 
   const register = useCallback(
@@ -238,7 +252,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (invalid) throw new Error(invalid);
       }
 
-      registering.current = true;
+      if (authAction.current) throw new Error('Autentikasi sedang diproses.');
+      authAction.current = 'register';
+      sessionRevision.current++;
       try {
         let cred;
 
@@ -275,7 +291,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setProfile(created);
         return created;
       } finally {
-        registering.current = false;
+        authAction.current = null;
         setLoading(false);
       }
     },
@@ -283,27 +299,45 @@ export function AuthProvider({ children }: PropsWithChildren) {
   );
 
   const login = useCallback(async (email: string, password: string, role: Role) => {
-    const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-    const base = await fetchProfile(cred.user.uid);
+    if (authAction.current) throw new Error('Autentikasi sedang diproses.');
+    authAction.current = 'login';
+    sessionRevision.current++;
 
-    if (!base) {
-      await signOut(auth);
-      throw new Error('Profil akun tidak ditemukan.');
+    let user: User | undefined;
+    try {
+      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      user = credential.user;
+      const base = await fetchProfile(user.uid);
+
+      if (!base) throw new Error('Profil akun tidak ditemukan.');
+
+      if (!base.roles.includes(role)) {
+        throw new Error(
+          role === 'asisten'
+            ? 'Akun ini belum terdaftar sebagai asisten. Tambahkan peran asisten lewat halaman Daftar.'
+            : 'Akun ini belum terdaftar sebagai praktikan. Tambahkan peran praktikan lewat halaman Daftar.',
+        );
+      }
+
+      const next: Profile = { ...(await syncProfileEmail(user, base)), role };
+      await rememberRole(role);
+      if (auth.currentUser?.uid !== user.uid) {
+        throw new Error('Sesi login berakhir. Masuk kembali.');
+      }
+      setFirebaseUser(user);
+      setProfile(next);
+      return next;
+    } catch (error) {
+      if (user) {
+        setFirebaseUser(null);
+        setProfile(null);
+        if (auth.currentUser?.uid === user.uid) await signOut(auth);
+      }
+      throw error;
+    } finally {
+      authAction.current = null;
+      setLoading(false);
     }
-
-    if (!base.roles.includes(role)) {
-      await signOut(auth);
-      throw new Error(
-        role === 'asisten'
-          ? 'Akun ini belum terdaftar sebagai asisten. Tambahkan peran asisten lewat halaman Daftar.'
-          : 'Akun ini belum terdaftar sebagai praktikan. Tambahkan peran praktikan lewat halaman Daftar.',
-      );
-    }
-
-    const next: Profile = { ...base, role };
-    await rememberRole(role);
-    setProfile(next);
-    return next;
   }, []);
 
   const logout = useCallback(async () => {

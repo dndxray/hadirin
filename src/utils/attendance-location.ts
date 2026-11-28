@@ -1,5 +1,5 @@
 import type { AttendanceQr, CheckInEvidence, DevicePosition, Lab } from '@/types/sprint-three';
-import { getSessionStatus } from '@/utils/session-status';
+import { getSessionSchedule, getSessionStatus } from '@/utils/session-status';
 
 export const MAX_POSITION_AGE_MS = 30_000;
 export const MAX_POSITION_ACCURACY_METERS = 50;
@@ -82,8 +82,10 @@ export function validateCheckIn(
 ) {
   // Status dihitung dari jam sesi, bukan hanya dari field database
   const status = getSessionStatus(session, new Date(now));
-  if (status === 'upcoming') throw new Error('Sesi belum dibuka. Presensi bisa dilakukan setelah jam mulai.');
   if (status === 'closed') throw new Error('Sesi sudah ditutup. Presensi tidak dapat dilakukan lagi.');
+  if (status !== 'open' || (session.status !== 'open' && !getSessionSchedule(session))) {
+    throw new Error('Sesi belum dibuka. Presensi bisa dilakukan setelah jam mulai.');
+  }
   if (!evidence?.position || !['location', 'qr'].includes(evidence.method)) {
     throw new Error('Lokasi perangkat wajib diperiksa sebelum presensi.');
   }

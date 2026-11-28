@@ -45,6 +45,22 @@ test('presensi mensyaratkan open dan evidence lokasi', () => {
   assert.throws(() => api.validateCheckIn(session, lab, undefined, now));
   assert.throws(() => api.validateCheckIn(session, lab, { ...evidence, position: { ...position, latitude: 1 } }, now));
 });
+test('presensi mengikuti jadwal dan tetap menghormati penutupan manual', () => {
+  const scheduled = {
+    ...session, dateLabel: 'Selasa, 15 Januari 2030', startTime: '11.00', endTime: '12.00',
+  };
+  const before = Date.parse('2030-01-15T10:59:00+07:00');
+  const during = Date.parse('2030-01-15T11:30:00+07:00');
+  const after = Date.parse('2030-01-15T12:01:00+07:00');
+  const checkIn = (status, time) => api.validateCheckIn(
+    { ...scheduled, status }, lab, { ...evidence, position: { ...position, timestamp: time } }, time,
+  );
+
+  assert.throws(() => checkIn('open', before), /belum dibuka/);
+  assert.equal(checkIn('upcoming', during).inside, true);
+  assert.throws(() => checkIn('closed', during), /sudah ditutup/);
+  assert.throws(() => checkIn('open', after), /sudah ditutup/);
+});
 test('parser QR hanya menerima kontrak version 1 yang valid', () => {
   const qr = { type: 'hadirin.attendance', version: 1, sessionId: session.id, token: session.qrToken };
   assert.deepEqual(api.parseAttendanceQr(JSON.stringify(qr)), qr);

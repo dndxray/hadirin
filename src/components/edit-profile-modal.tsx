@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
     KeyboardAvoidingView,
     Modal,
@@ -47,6 +47,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function EditProfileModal({ visible, showNim, initial, onClose, onSave }: Props) {
   const insets = useSafeAreaInsets();
+  const [wasVisible, setWasVisible] = useState(false);
   const [name, setName] = useState('');
   const [avatarId, setAvatarId] = useState('');
   const [color, setColor] = useState(DEFAULT_AVATAR_COLOR);
@@ -57,19 +58,20 @@ export function EditProfileModal({ visible, showNim, initial, onClose, onSave }:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!visible) return;
-    setName(initial.name);
-    setAvatarId(initial.avatarId ?? '');
-    setColor(initial.avatarColor ?? DEFAULT_AVATAR_COLOR);
-    setNim(initial.nim ?? '');
-    setEmail(initial.email);
-    setNewPassword('');
-    setCurrentPassword('');
-    setError(null);
-    setBusy(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible) {
+      setName(initial.name);
+      setAvatarId(initial.avatarId ?? '');
+      setColor(initial.avatarColor ?? DEFAULT_AVATAR_COLOR);
+      setNim(initial.nim ?? '');
+      setEmail(initial.email);
+      setNewPassword('');
+      setCurrentPassword('');
+      setError(null);
+      setBusy(false);
+    }
+  }
 
   const cleanEmail = email.trim().toLowerCase();
   const emailChanged = cleanEmail !== initial.email.trim().toLowerCase();
