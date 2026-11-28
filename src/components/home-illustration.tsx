@@ -100,6 +100,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipQr: { right: 1, top: 30, width: 42, height: 42, borderRadius: 12 },
-  chipClock: { left: 26, top: 70, width: 28, height: 28, borderRadius: 14 },
+  chipQr: { right: 1, top: 70, width: 42, height: 42, borderRadius: 12 },
+  chipClock: { left: 26, top: 30, width: 28, height: 28, borderRadius: 14 },
 });

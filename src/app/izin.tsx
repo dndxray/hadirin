@@ -78,16 +78,19 @@ export default function PermissionScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       >
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-          <View style={styles.inner}>
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+          <View style={styles.headerCircleA} />
+          <View style={styles.headerCircleB} />
+          <View style={styles.headerRow}>
             <BackButton
               accessibilityLabel="Kembali ke sesi"
               disabled={busy}
               onPress={goBack}
-              style={styles.back}
             />
-            <Text accessibilityRole="header" style={styles.title}>Pengajuan izin</Text>
-            <Text style={styles.subtitle}>Jelaskan ketidakhadiranmu untuk sesi praktikum.</Text>
+            <View style={styles.headerText}>
+              <Text accessibilityRole="header" style={styles.title}>Pengajuan izin</Text>
+              <Text style={styles.subtitle}>Jelaskan ketidakhadiranmu untuk sesi praktikum.</Text>
+            </View>
           </View>
         </View>
 
@@ -209,10 +212,16 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: authColors.background },
   loadingScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: authColors.background },
   inner: { width: '100%', maxWidth: 560, alignSelf: 'center' },
-  header: { backgroundColor: authColors.navy, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, paddingHorizontal: 24, paddingBottom: 28 },
-  back: { marginBottom: 16 },
-  title: { color: authColors.white, fontSize: 26, lineHeight: 34, fontWeight: '800' },
-  subtitle: { color: '#BBC7DC', fontSize: 14, lineHeight: 22, marginTop: 6 },
+
+  // Header (sama dengan Jadwal asisten)
+  header: { backgroundColor: '#1B2A4E', borderBottomLeftRadius: 40, borderBottomRightRadius: 40, paddingHorizontal: 24, paddingBottom: 40, overflow: 'hidden' },
+  headerCircleA: { position: 'absolute', top: -60, right: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(96,165,250,0.18)' },
+  headerCircleB: { position: 'absolute', bottom: -70, left: -50, width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.05)' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  headerText: { flex: 1 },
+  title: { color: '#FFFFFF', fontSize: 26, fontWeight: '800' },
+  subtitle: { color: '#CBD5E1', fontSize: 13, marginTop: 2 },
+
   body: { paddingHorizontal: 20, paddingTop: 24 },
   form: { gap: 24 },
   flexible: { flex: 1, minWidth: 0 },

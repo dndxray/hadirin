@@ -469,7 +469,6 @@ export default function KelasScreen() {
               <Text style={styles.addTitle}>Tambah Kelas</Text>
               <Text style={styles.addHint}>Buat kelas praktikum baru</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#64748B" />
           </Pressable>
         </View>
 

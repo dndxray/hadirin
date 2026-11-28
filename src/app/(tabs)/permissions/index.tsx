@@ -148,10 +148,15 @@ function DetailView({
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
+      <View style={[styles.header, styles.headerDetail, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.headerCircleA} />
+        <View style={styles.headerCircleB} />
         <View style={styles.headerRow}>
           <BackButton onPress={onBack} />
-          <Text style={styles.headerTitle}>Detail Permohonan</Text>
+          <View style={styles.headerText}>
+            <Text style={styles.headerTitleBig}>Detail Permohonan</Text>
+            <Text style={styles.headerSub} numberOfLines={1}>{item.practitionerName}</Text>
+          </View>
         </View>
       </View>
 
@@ -299,6 +304,9 @@ export default function PermissionsScreen() {
   const [month, setMonth] = useState<number | null>(null);
   const [monthOpen, setMonthOpen] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
+  // Posisi tepi bawah baris pencarian, dipakai untuk menaruh panel filter
+  // melayang tepat di bawahnya.
+  const [searchBottom, setSearchBottom] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [decisionTarget, setDecisionTarget] = useState<PermissionRequestItem | null>(null);
@@ -359,6 +367,11 @@ export default function PermissionsScreen() {
     setDecisionTarget(null);
   };
 
+  const closeFilter = () => {
+    setShowFilter(false);
+    setMonthOpen(false);
+  };
+
   const selected = selectedId ? items.find((i) => i.id === selectedId) ?? null : null;
   const filterActive = month !== null;
 
@@ -394,14 +407,21 @@ export default function PermissionsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, styles.headerList, { paddingTop: insets.top + 20 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.headerCircleA} />
+        <View style={styles.headerCircleB} />
         <View style={styles.headerRow}>
           <BackButton />
-          <Text style={styles.headerTitleBig}>Izin</Text>
+          <View style={styles.headerText}>
+            <Text style={styles.headerTitleBig}>Izin</Text>
+          </View>
         </View>
       </View>
 
-      <View style={styles.searchWrap}>
+      <View
+        style={styles.searchWrap}
+        onLayout={(e) => setSearchBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
+      >
         <View style={styles.searchRow}>
           <View style={styles.search}>
             <Ionicons name="search-outline" size={18} color={authColors.muted} />
@@ -423,7 +443,7 @@ export default function PermissionsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Filter"
             accessibilityState={{ expanded: showFilter }}
-            onPress={() => setShowFilter((v) => !v)}
+            onPress={() => (showFilter ? closeFilter() : setShowFilter(true))}
             style={[styles.filterBtn, (showFilter || filterActive) && styles.filterBtnOn]}
           >
             <Ionicons
@@ -434,79 +454,6 @@ export default function PermissionsScreen() {
             {filterActive ? <View style={styles.filterDot} /> : null}
           </Pressable>
         </View>
-
-        {showFilter ? (
-          <View style={styles.filterPanel}>
-            <Text style={styles.filterLabel}>Status</Text>
-            <View style={styles.filterWrap}>
-              {STATUS_TABS.map((t) => (
-                <Pressable
-                  key={t.key}
-                  onPress={() => setStatus(t.key)}
-                  style={[styles.pill, status === t.key && styles.pillOn]}
-                >
-                  <Text style={[styles.pillText, status === t.key && styles.pillTextOn]}>{t.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <Text style={[styles.filterLabel, { marginTop: 14 }]}>Bulan</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Pilih bulan"
-              accessibilityState={{ expanded: monthOpen }}
-              onPress={() => setMonthOpen((v) => !v)}
-              style={styles.dropdown}
-            >
-              <Ionicons name="calendar-outline" size={18} color={authColors.navy} />
-              <Text style={styles.dropdownText}>
-                {month === null ? 'Semua bulan' : MONTHS[month]}
-              </Text>
-              <Ionicons
-                name={monthOpen ? 'chevron-up' : 'chevron-down'}
-                size={18}
-                color={authColors.muted}
-              />
-            </Pressable>
-            {monthOpen ? (
-              <View style={styles.dropdownList}>
-                <ScrollView nestedScrollEnabled style={{ maxHeight: 220 }}>
-                  {[null, ...MONTHS.map((_, i) => i)].map((m) => {
-                    const active = month === m;
-                    return (
-                      <Pressable
-                        key={m === null ? 'semua' : m}
-                        onPress={() => {
-                          setMonth(m);
-                          setMonthOpen(false);
-                        }}
-                        style={[styles.dropdownItem, active && styles.dropdownItemOn]}
-                      >
-                        <Text style={[styles.dropdownItemText, active && styles.dropdownItemTextOn]}>
-                          {m === null ? 'Semua bulan' : MONTHS[m]}
-                        </Text>
-                        {active ? <Ionicons name="checkmark" size={18} color={authColors.navy} /> : null}
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            ) : null}
-
-            {(status !== 'all' || month !== null) ? (
-              <Pressable
-                onPress={() => {
-                  setStatus('all');
-                  setMonth(null);
-                  setMonthOpen(false);
-                }}
-                hitSlop={8}
-              >
-                <Text style={styles.reset}>Reset filter</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
       </View>
 
       <View style={styles.tabsWrap}>
@@ -557,6 +504,91 @@ export default function PermissionsScreen() {
         />
       )}
 
+      {/* Panel filter melayang di atas isi. Ditaruh di level layar (bukan di
+          dalam baris pencarian) supaya tetap bisa disentuh di Android. */}
+      {showFilter ? (
+        <>
+          {/* Area di bawah baris pencarian: mengetuknya menutup panel */}
+          <Pressable
+            accessibilityLabel="Tutup filter"
+            onPress={closeFilter}
+            style={[styles.filterBackdrop, { top: searchBottom }]}
+          />
+          <View style={[styles.filterOverlay, { top: searchBottom + 10 }]} pointerEvents="box-none">
+            <View style={styles.filterPanel}>
+              <Text style={styles.filterLabel}>Status</Text>
+              <View style={styles.filterWrap}>
+                {STATUS_TABS.map((t) => (
+                  <Pressable
+                    key={t.key}
+                    onPress={() => setStatus(t.key)}
+                    style={[styles.pill, status === t.key && styles.pillOn]}
+                  >
+                    <Text style={[styles.pillText, status === t.key && styles.pillTextOn]}>{t.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={[styles.filterLabel, { marginTop: 14 }]}>Bulan</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Pilih bulan"
+                accessibilityState={{ expanded: monthOpen }}
+                onPress={() => setMonthOpen((v) => !v)}
+                style={styles.dropdown}
+              >
+                <Ionicons name="calendar-outline" size={18} color={authColors.navy} />
+                <Text style={styles.dropdownText}>
+                  {month === null ? 'Semua bulan' : MONTHS[month]}
+                </Text>
+                <Ionicons
+                  name={monthOpen ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={authColors.muted}
+                />
+              </Pressable>
+              {monthOpen ? (
+                <View style={styles.dropdownList}>
+                  <ScrollView nestedScrollEnabled style={{ maxHeight: 220 }}>
+                    {[null, ...MONTHS.map((_, i) => i)].map((m) => {
+                      const active = month === m;
+                      return (
+                        <Pressable
+                          key={m === null ? 'semua' : m}
+                          onPress={() => {
+                            setMonth(m);
+                            setMonthOpen(false);
+                          }}
+                          style={[styles.dropdownItem, active && styles.dropdownItemOn]}
+                        >
+                          <Text style={[styles.dropdownItemText, active && styles.dropdownItemTextOn]}>
+                            {m === null ? 'Semua bulan' : MONTHS[m]}
+                          </Text>
+                          {active ? <Ionicons name="checkmark" size={18} color={authColors.navy} /> : null}
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              ) : null}
+
+              {(status !== 'all' || month !== null) ? (
+                <Pressable
+                  onPress={() => {
+                    setStatus('all');
+                    setMonth(null);
+                    setMonthOpen(false);
+                  }}
+                  hitSlop={8}
+                >
+                  <Text style={styles.reset}>Reset filter</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        </>
+      ) : null}
+
       {decisionModal}
     </View>
   );
@@ -565,24 +597,38 @@ export default function PermissionsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: authColors.background },
 
+  // Header (sama dengan Jadwal asisten)
   header: {
-    backgroundColor: authColors.navy,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    backgroundColor: '#1B2A4E',
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
+    paddingHorizontal: 24,
+    paddingBottom: 56,
+    overflow: 'hidden',
   },
-  headerList: { paddingBottom: 52 },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    gap: 12,
-    maxWidth: 560,
-    alignSelf: 'center',
-    width: '100%',
+  headerDetail: { paddingBottom: 36 },
+  headerCircleA: {
+    position: 'absolute',
+    top: -60,
+    right: -40,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(96,165,250,0.18)',
   },
-  headerTitle: { flex: 1, color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
-  headerTitleBig: { flex: 1, color: '#FFFFFF', fontSize: 24, fontWeight: '800' },
+  headerCircleB: {
+    position: 'absolute',
+    bottom: -70,
+    left: -50,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  headerText: { flex: 1 },
+  headerTitleBig: { color: '#FFFFFF', fontSize: 26, fontWeight: '800' },
+  headerSub: { color: '#CBD5E1', fontSize: 13, marginTop: 2 },
 
   searchWrap: {
     paddingHorizontal: 20,
@@ -635,16 +681,34 @@ const styles = StyleSheet.create({
     borderColor: authColors.white,
   },
 
+  // Panel filter melayang: tidak menggeser isi di bawahnya
+  filterBackdrop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 15,
+  },
+  filterOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 20,
+    elevation: 20,
+  },
   filterPanel: {
-    marginTop: 10,
+    width: '100%',
+    maxWidth: 560,
+    marginHorizontal: 20,
     backgroundColor: authColors.white,
     borderRadius: 18,
     padding: 16,
     shadowColor: '#1B2A4E',
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 3,
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 20,
   },
   filterLabel: { color: authColors.ink, fontSize: 13, fontWeight: '800', marginBottom: 8 },
   filterWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

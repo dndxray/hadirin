@@ -247,11 +247,11 @@ export default function JadwalAsistenScreen() {
         onPress={() => setShowAddModal(true)}
         style={({ pressed }) => [
           styles.fab,
-          { bottom: insets.bottom + 96 },
+          { bottom: insets.bottom + 100 },
           pressed && { opacity: 0.85 },
         ]}
       >
-        <Ionicons name="add" size={30} color="#FFFFFF" />
+        <Ionicons name="add" size={50} color="#FFFFFF" />
       </Pressable>
 
       <SessionFormModal
@@ -308,17 +308,17 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 24,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: '#2F5AA8',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#1B2A4E',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 10,
     zIndex: 10,
   },
 
