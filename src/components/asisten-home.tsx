@@ -1,6 +1,7 @@
 import { AsistenSessionCard } from '@/components/asisten-session-card';
 import { authColors } from '@/components/auth-ui';
 import { HomeIllustration } from '@/components/home-illustration';
+import { NotificationBell } from '@/components/notification-bell';
 import { QuickIllustration, type QuickKind } from '@/components/quick-menu-illustrations';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
@@ -146,8 +147,13 @@ export function AsistenHome() {
                 Hai, {firstName}
               </Text>
             </View>
-            <HomeIllustration />
+            <View style={styles.illustration}>
+              <HomeIllustration />
+            </View>
           </View>
+          <NotificationBell
+            style={{ position: 'absolute', right: 20, top: insets.top + 12, zIndex: 10 }}
+          />
         </View>
 
         {/* Pencarian (menimpa tepi bawah header) */}
@@ -242,12 +248,9 @@ export function AsistenHome() {
         mode="create"
         onClose={() => setShowAddModal(false)}
         onSubmit={async (data) => {
-          try {
-            await createSession(data, profile?.name || 'Asisten');
-            setShowAddModal(false);
-          } catch (error: any) {
-            alert(error.message);
-          }
+          // Error sengaja tidak ditelan di sini: modal yang menampilkannya
+          // dan menghentikan pengulangan kalau ada sesi yang gagal tersimpan.
+          await createSession(data, profile?.name || 'Asisten');
         }}
       />
     </View>
@@ -286,6 +289,7 @@ const styles = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerText: { flex: 1, paddingRight: 8 },
+  illustration: { transform: [{ translateX: -18 }, { translateY: 12 }] },
   greeting: { color: '#CBD5E1', fontSize: 15, marginBottom: 4 },
   name: { color: '#FFFFFF', fontSize: 32, fontWeight: '800' },
 
